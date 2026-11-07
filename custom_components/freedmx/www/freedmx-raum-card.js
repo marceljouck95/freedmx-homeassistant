@@ -1,6 +1,6 @@
 /*
  * freeDMX Raum-Karte für Home Assistant
- * Version 1.0.0
+ * Version 1.0.1
  *
  * - Grundriss des Raums (Maße aus der freeDMX-Integration: Konfigurieren → Raum)
  * - Moving Heads an ihrem Montageort, Lichtpunkt live auf dem Boden
@@ -13,7 +13,7 @@
  * /local/freedmx-raum-card.js (JavaScript-Modul) eintragen.
  */
 
-const FR_VERSION = "1.0.0";
+const FR_VERSION = "1.0.1";
 const frEd = (sr, k) => { try { if (window.EinheitDesign) window.EinheitDesign.adopt(sr, k); else (window.__edQ = window.__edQ || []).push([sr, k]); } catch (e) { /* Design-Zentrale optional */ } };
 
 const FR_DEFAULTS = {
@@ -269,9 +269,12 @@ class FreedmxRaumCard extends HTMLElement {
       const [hx, hy] = P(Number(h.mount.x), Number(h.mount.y));
       const t = h.target;
       if (t && c.show_beams) {
-        const [tx, ty] = P(t.x, t.y);
-        s += `<line class="beam" x1="${hx}" y1="${hy}" x2="${tx}" y2="${ty}" stroke="${h.color}"/>`;
-        s += `<circle class="spot ${h.on ? "" : "off"}" cx="${tx}" cy="${ty}" r="${sz * 1.25}" fill="${h.color}" fill-opacity=".75"/>`;
+        // Liegt der Punkt außerhalb (oder trifft der Strahl den Boden nicht), am Raumrand gestrichelt zeigen.
+        const inside = t.boden && t.x >= 0 && t.x <= W && t.y >= 0 && t.y <= D;
+        const [cx0, cy0] = inside ? [t.x, t.y] : frClamp({ width: W, depth: D, margin: 0 }, h.mount, t.x, t.y);
+        const [tx, ty] = P(cx0, cy0);
+        s += `<line class="beam" x1="${hx}" y1="${hy}" x2="${tx}" y2="${ty}" stroke="${h.color}" ${inside ? "" : 'stroke-dasharray=".1 .08"'}/>`;
+        s += `<circle class="spot ${h.on ? "" : "off"}" cx="${tx}" cy="${ty}" r="${sz * 1.25}" fill="${h.color}" fill-opacity="${inside ? ".75" : ".2"}"/>`;
       }
       s += `<rect class="headm" x="${hx - sz}" y="${hy - sz}" width="${sz * 2}" height="${sz * 2}" rx="${sz * 0.4}" fill="${h.color}" ${this._sel.has(h.id) ? "" : 'fill-opacity=".55"'}/>`;
       if (c.show_labels) s += `<text class="lbl" x="${hx}" y="${hy + sz * 2.8}" text-anchor="middle">${frEsc(h.name)}</text>`;
@@ -293,8 +296,8 @@ class FreedmxRaumCard extends HTMLElement {
     const t = cur?.target;
     this.$.info.innerHTML = cur
       ? `<span><b>${frEsc(cur.name)}</b></span>` +
-        (t ? `<span>x ${fmt(t.x)} m · y ${fmt(t.y)} m</span><span class="dim">Pan ${fmt(t.pan)} % · Tilt ${fmt(t.tilt)} %</span>` : `<span class="dim">Position unbekannt</span>`) +
-        (t && !t.boden ? `<span class="warn">Strahl trifft den Boden nicht</span>` : "")
+        (t && t.boden ? `<span>x ${fmt(t.x)} m · y ${fmt(t.y)} m</span><span class="dim">Pan ${fmt(t.pan)} % · Tilt ${fmt(t.tilt)} %</span>` : `<span class="dim">Position unbekannt</span>`) +
+        (t && !t.boden ? `<span class="warn">Strahl trifft den Boden nicht – im Plan tippen, um ihn auszurichten</span><span class="dim">Pan ${fmt(t.pan)} % · Tilt ${fmt(t.tilt)} %</span>` : "")
       : "";
 
     if (c.show_controls) {
