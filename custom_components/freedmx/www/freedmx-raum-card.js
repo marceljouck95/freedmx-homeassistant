@@ -1,6 +1,7 @@
 /*
  * freeDMX Raum-Karte für Home Assistant
- * Version 1.1.0
+ * Version 1.2.0
+ * NEU 1.2: Pfeiltasten für Pan/Tilt im Kalibrier-Modus
  * NEU 1.1: Kalibrieren – tatsächlichen Lichtpunkt im Plan antippen
  *
  * - Grundriss des Raums (Maße aus der freeDMX-Integration: Konfigurieren → Raum)
@@ -14,7 +15,7 @@
  * /local/freedmx-raum-card.js (JavaScript-Modul) eintragen.
  */
 
-const FR_VERSION = "1.1.0";
+const FR_VERSION = "1.2.0";
 const frEd = (sr, k) => { try { if (window.EinheitDesign) window.EinheitDesign.adopt(sr, k); else (window.__edQ = window.__edQ || []).push([sr, k]); } catch (e) { /* Design-Zentrale optional */ } };
 
 const FR_DEFAULTS = {
@@ -197,6 +198,18 @@ class FreedmxRaumCard extends HTMLElement {
       if (b.dataset.act === "toggle") {
         const anyOn = this._heads().some((x) => this._sel.has(x.id) && x.on);
         this._hass.callService("light", anyOn ? "turn_off" : "turn_on", { entity_id: ids });
+      } else if (b.dataset.act === "jog") {
+        const h = this._heads().find((x) => this._sel.has(x.id));
+        if (!h || !h.target) return;
+        const step = Number(this._step || 2) * (b.dataset.d.endsWith("+") ? 1 : -1);
+        let pan = Number(h.target.pan), tilt = Number(h.target.tilt);
+        if (b.dataset.d.startsWith("pan")) pan += step; else tilt += step;
+        pan = Math.max(0, Math.min(100, pan)); tilt = Math.max(0, Math.min(100, tilt));
+        const data = { lamp_id: h.lamp, pan: Math.round(pan * 100) / 100, tilt: Math.round(tilt * 100) / 100, ohne_begrenzung: true };
+        if (h.entry) data.config_entry_id = h.entry;
+        this._hass.callService("freedmx", "move", data).catch((e) => { this._note = `Fehler: ${e.message || e}`; this._render(true); });
+      } else if (b.dataset.act === "step") {
+        this._step = Number(b.dataset.v); this._ctlBuilt = false; this._render(true);
       } else if (b.dataset.act === "cal") {
         this._cal = !this._cal; this._ghost = null; this._ctlBuilt = false; this._render(true);
       } else if (b.dataset.act === "center") {
@@ -331,7 +344,16 @@ class FreedmxRaumCard extends HTMLElement {
     if (c.show_controls) {
       const anyOn = heads.some((x) => this._sel.has(x.id) && x.on);
       const bri = Math.round(((cur?.bri || 0) / 255) * 100);
-      if (!this._ctlBuilt || this._ctlOn !== anyOn) {
+      if (this._cal) {
+        if (!this._ctlBuilt) {
+          const st = Number(this._step || 2);
+          this.$.ctl.innerHTML = `<button class="btn on" data-act="cal">Abbrechen</button>
+            <button class="btn" data-act="jog" data-d="pan-">◀ Pan</button><button class="btn" data-act="jog" data-d="pan+">Pan ▶</button>
+            <button class="btn" data-act="jog" data-d="tilt-">▲ Tilt</button><button class="btn" data-act="jog" data-d="tilt+">Tilt ▼</button>
+            ${[0.5, 2, 10].map((v) => `<button class="btn ${st === v ? "on" : ""}" data-act="step" data-v="${v}">${String(v).replace(".", ",")} %</button>`).join("")}`;
+          this._ctlBuilt = true;
+        }
+      } else if (!this._ctlBuilt || this._ctlOn !== anyOn) {
         this.$.ctl.innerHTML = `<button class="btn ${anyOn ? "on" : ""}" data-act="toggle">${anyOn ? "Aus" : "Ein"}</button>
           <button class="btn" data-act="center">Raummitte</button>
           <button class="btn ${this._cal ? "on" : ""}" data-act="cal">${this._cal ? "Abbrechen" : "Kalibrieren"}</button>
@@ -344,7 +366,7 @@ class FreedmxRaumCard extends HTMLElement {
     } else { this.$.ctl.innerHTML = ""; this._ctlBuilt = false; }
 
     const unset = heads.filter((x) => !x.set).map((x) => x.name);
-    if (this._cal) { this.$.warn.textContent = `Kalibrieren: Tippe im Plan genau dorthin, wo der Lichtpunkt von ${cur?.name || "dem Kopf"} gerade wirklich auf dem Boden liegt.`; return; }
+    if (this._cal) { this.$.warn.textContent = `Kalibrieren ${cur?.name || ""}: Lichtpunkt mit den Pfeilen auf eine gut sichtbare Stelle am Boden fahren (Begrenzung ist dabei aus), dann im Plan genau auf diese Stelle tippen.`; return; }
     if (this._note) { this.$.warn.textContent = this._note; return; }
     this.$.warn.textContent = unset.length
       ? `Montage nicht eingestellt (Platzhalter): ${unset.join(", ")} – Einstellungen → freeDMX → Konfigurieren → Lampe bearbeiten.`

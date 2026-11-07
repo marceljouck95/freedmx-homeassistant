@@ -30,6 +30,10 @@ from .const import (
     ATTR_Y,
     SERVICE_AIM,
     SERVICE_CALIBRATE,
+    SERVICE_MOVE,
+    ATTR_PAN,
+    ATTR_TILT,
+    ATTR_FREE,
     DEFAULT_HOST,
     DEFAULT_PORT,
     DOMAIN,
@@ -103,6 +107,16 @@ AIM_SCHEMA = vol.Schema(
         vol.Required(ATTR_LAMP_ID): cv.string,
         vol.Required(ATTR_X): vol.Coerce(float),
         vol.Required(ATTR_Y): vol.Coerce(float),
+    }
+)
+
+MOVE_SCHEMA = vol.Schema(
+    {
+        vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string,
+        vol.Required(ATTR_LAMP_ID): cv.string,
+        vol.Required(ATTR_PAN): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
+        vol.Required(ATTR_TILT): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
+        vol.Optional(ATTR_FREE, default=False): cv.boolean,
     }
 )
 
@@ -235,6 +249,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         if room.limit:
             x, y = clamp_point(room, mount, x, y)
         pan, tilt = aim_percent(mount, x, y)
+        entry.runtime_data.free_lamps.discard(lamp["id"])
         for channel, value in position_writes(
             lamp, percent_to_16bit(pan), percent_to_16bit(tilt)
         ):
@@ -273,6 +288,30 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             options={**entry.options, CONF_LAMPS: [lamp if l["id"] == lamp["id"] else l for l in lamps]},
         )
 
+    async def handle_move(call: ServiceCall) -> None:
+        """Pan/Tilt direkt in Prozent setzen (z. B. zum Kalibrieren).
+
+        ohne_begrenzung: Raum-Begrenzung für diese Lampe kurz aussetzen (bis zum nächsten Neuladen
+        bzw. bis ein Ziel über aim/Positionen/Szenen gesetzt wird).
+        """
+        entry = _target_entry(hass, call.data.get(ATTR_CONFIG_ENTRY_ID))
+        conf = merged_config(entry)
+        lamp = next(
+            (l for l in conf.get(CONF_LAMPS, []) if l["id"] == call.data[ATTR_LAMP_ID]),
+            None,
+        )
+        if lamp is None or not has_position(parse_layout_safe(lamp)):
+            raise ServiceValidationError("Lampe ohne Pan/Tilt oder nicht gefunden.")
+        device = entry.runtime_data
+        device.free_lamps.discard(lamp["id"])
+        if call.data[ATTR_FREE]:
+            device.free_lamps.add(lamp["id"])
+        for channel, value in position_writes(
+            lamp, percent_to_16bit(call.data[ATTR_PAN]), percent_to_16bit(call.data[ATTR_TILT])
+        ):
+            device.set_channels(channel, [value])
+
+    hass.services.async_register(DOMAIN, SERVICE_MOVE, handle_move, schema=MOVE_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_AIM, handle_aim, schema=AIM_SCHEMA)
     hass.services.async_register(
         DOMAIN, SERVICE_CALIBRATE, handle_calibrate, schema=AIM_SCHEMA
@@ -320,7 +359,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     room_data = conf.get(CONF_ROOM)
     for lamp in conf.get(CONF_LAMPS, []):
         if (guard := make_guard(lamp, room_data)) is not None:
-            device.guards.append(guard)
+            device.guards.append(_skip_when_free(device, lamp["id"], guard))
 
     dr.async_get(hass).async_get_or_create(
         config_entry_id=entry.entry_id,
@@ -334,6 +373,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
+
+
+def _skip_when_free(device: FreeDmxDevice, lamp_id: str, guard):
+    def wrapped(buf, first, last):
+        if lamp_id in device.free_lamps:
+            return False
+        return guard(buf, first, last)
+
+    return wrapped
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

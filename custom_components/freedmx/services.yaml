@@ -112,3 +112,33 @@ calibrate:
           max: 100
           step: 0.05
           unit_of_measurement: m
+
+move:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: freedmx
+    lamp_id:
+      required: true
+      selector:
+        text:
+    pan:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.1
+          unit_of_measurement: "%"
+    tilt:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.1
+          unit_of_measurement: "%"
+    ohne_begrenzung:
+      selector:
+        boolean:

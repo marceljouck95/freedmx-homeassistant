@@ -257,6 +257,32 @@
           "description": "Distance from head wall in metres."
         }
       }
+    },
+    "move": {
+      "name": "Set pan/tilt",
+      "description": "Sets pan and tilt of a moving head directly in percent.",
+      "fields": {
+        "config_entry_id": {
+          "name": "freeDMX device",
+          "description": "Only needed with several freeDMX."
+        },
+        "lamp_id": {
+          "name": "Lamp",
+          "description": "Lamp id (lamp_id attribute of the light)."
+        },
+        "pan": {
+          "name": "Pan",
+          "description": "0–100 %"
+        },
+        "tilt": {
+          "name": "Tilt",
+          "description": "0–100 %"
+        },
+        "ohne_begrenzung": {
+          "name": "Without limit",
+          "description": "Suspend the room limit for this lamp (for calibration)."
+        }
+      }
     }
   },
   "entity": {

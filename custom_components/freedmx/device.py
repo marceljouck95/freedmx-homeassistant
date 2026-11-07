@@ -52,6 +52,7 @@ class FreeDmxDevice(asyncio.DatagramProtocol):
         # Raum-Begrenzung: Funktionen (puffer, erster, letzter Kanal) -> geändert?
         self.guards: list[Callable[[bytearray, int, int], bool]] = []
         self._value_listeners: list[Callable[[int, int], None]] = []
+        self.free_lamps: set[str] = set()  # Lampen, deren Begrenzung gerade ausgesetzt ist
 
     # ---------- Zustand ----------
     @property

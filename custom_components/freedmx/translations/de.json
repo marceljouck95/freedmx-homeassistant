@@ -257,6 +257,32 @@
           "description": "Abstand von der Kopfwand in Metern."
         }
       }
+    },
+    "move": {
+      "name": "Pan/Tilt setzen",
+      "description": "Setzt Pan und Tilt eines Moving Heads direkt in Prozent.",
+      "fields": {
+        "config_entry_id": {
+          "name": "freeDMX-Gerät",
+          "description": "Nur nötig bei mehreren freeDMX."
+        },
+        "lamp_id": {
+          "name": "Lampe",
+          "description": "ID der Lampe (Attribut lamp_id der Licht-Entität)."
+        },
+        "pan": {
+          "name": "Pan",
+          "description": "0–100 %"
+        },
+        "tilt": {
+          "name": "Tilt",
+          "description": "0–100 %"
+        },
+        "ohne_begrenzung": {
+          "name": "Ohne Begrenzung",
+          "description": "Raum-Begrenzung für diese Lampe aussetzen (zum Kalibrieren)."
+        }
+      }
     }
   },
   "entity": {
