@@ -139,6 +139,9 @@
         "drgb": "Dimmer + RGB (4 Kanäle: D,R,G,B)",
         "drgbw": "Dimmer + RGBW (5 Kanäle: D,R,G,B,W)",
         "par7": "7-Kanal-PAR (D,R,G,B, Strobe/Modus/Speed = 0)",
+        "dmh40": "Futurelight DMH-40 (14 Kanäle)",
+        "fe1500": "Eurolite FE-1500 Hybrid (9 Kanäle)",
+        "ledbar5": "Eurolite LED Bar RGB 126/10 (5 Kanäle)",
         "custom": "Eigene Belegung"
       }
     }
@@ -281,6 +284,28 @@
         "ohne_begrenzung": {
           "name": "Ohne Begrenzung",
           "description": "Raum-Begrenzung für diese Lampe aussetzen (zum Kalibrieren)."
+        }
+      }
+    },
+    "set_lamp_channel": {
+      "name": "Lampen-Kanal einstellen",
+      "description": "Stellt einen festen Kanal einer Lampe dauerhaft ein (z. B. Farbrad, Gobo, Laser).",
+      "fields": {
+        "config_entry_id": {
+          "name": "freeDMX-Gerät",
+          "description": "Nur nötig bei mehreren freeDMX."
+        },
+        "lamp_id": {
+          "name": "Lampe",
+          "description": "ID der Lampe (Attribut lamp_id der Licht-Entität)."
+        },
+        "kanal": {
+          "name": "Kanal",
+          "description": "Kanal der Lampe (1 = Startadresse)."
+        },
+        "wert": {
+          "name": "Wert",
+          "description": "0–255. Leer lassen = auf Grundeinstellung zurück."
         }
       }
     }

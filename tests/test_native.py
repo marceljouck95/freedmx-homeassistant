@@ -244,6 +244,28 @@ def test_calibration_recovers_offsets():
     assert abs(fx - 2.0) < 0.02 and abs(fy - 6.0) < 0.02
 
 
+
+def test_effect_without_dimmer_turns_fully_off():
+    lay = p.parse_layout("255,164,0,0,0,0,0,30,0")
+    assert p.compute_values(lay, "brightness", True, 255, None) == [255, 164, 0, 0, 0, 0, 0, 30, 0]
+    assert p.compute_values(lay, "brightness", False, 255, None) == [0] * 9
+    dmh = p.parse_layout("P,T,0,0,0,0,0,0,0,255,D,0,p,t")
+    off = p.compute_values(dmh, "brightness", False, 255, None)
+    assert off[9] == 255 and off[10] == 0  # Shutter bleibt, Dimmer 0
+
+
+def test_fixture_profiles_match_presets():
+    from fdmx import fixtures as fx
+    from fdmx.const import PRESETS
+    for key in ("dmh40", "fe1500", "ledbar5"):
+        lay = p.parse_layout(PRESETS[key])
+        info = fx.channel_info(key, lay)
+        assert len(info) == len(lay) and all(i["name"] for i in info), key
+    info = fx.channel_info("dmh40", p.parse_layout(PRESETS["dmh40"]))
+    assert info[3]["name"] == "Farbrad" and info[3]["frei"] and not info[0]["frei"]
+    assert fx.channel_info("fe1500", p.parse_layout("D,R"))[0]["name"] == "Dimmer"  # passt nicht -> Standardnamen
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

@@ -31,6 +31,9 @@ from .const import (
     SERVICE_AIM,
     SERVICE_CALIBRATE,
     SERVICE_MOVE,
+    SERVICE_SET_LAMP_CHANNEL,
+    ATTR_KANAL,
+    ATTR_WERT,
     ATTR_PAN,
     ATTR_TILT,
     ATTR_FREE,
@@ -117,6 +120,15 @@ MOVE_SCHEMA = vol.Schema(
         vol.Required(ATTR_PAN): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
         vol.Required(ATTR_TILT): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
         vol.Optional(ATTR_FREE, default=False): cv.boolean,
+    }
+)
+
+LAMP_CHANNEL_SCHEMA = vol.Schema(
+    {
+        vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string,
+        vol.Required(ATTR_LAMP_ID): cv.string,
+        vol.Required(ATTR_KANAL): vol.All(vol.Coerce(int), vol.Range(min=1, max=512)),
+        vol.Optional(ATTR_WERT): vol.Any(None, vol.All(vol.Coerce(int), vol.Range(min=0, max=255))),
     }
 )
 
@@ -311,6 +323,18 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         ):
             device.set_channels(channel, [value])
 
+    async def handle_lamp_channel(call: ServiceCall) -> None:
+        light = hass.data.get(DOMAIN, {}).get("lights", {}).get(call.data[ATTR_LAMP_ID])
+        if light is None:
+            raise ServiceValidationError("Lampe nicht gefunden.")
+        try:
+            light.set_override(call.data[ATTR_KANAL], call.data.get(ATTR_WERT))
+        except ValueError as err:
+            raise ServiceValidationError(str(err)) from err
+
+    hass.services.async_register(
+        DOMAIN, SERVICE_SET_LAMP_CHANNEL, handle_lamp_channel, schema=LAMP_CHANNEL_SCHEMA
+    )
     hass.services.async_register(DOMAIN, SERVICE_MOVE, handle_move, schema=MOVE_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_AIM, handle_aim, schema=AIM_SCHEMA)
     hass.services.async_register(

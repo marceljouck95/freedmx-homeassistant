@@ -25,6 +25,7 @@ from .device import FreeDmxDevice
 from .const import CONF_LAMPS, CONF_ROOM, DOMAIN, LAMP_ID, LAMP_LAYOUT, LAMP_NAME, LAMP_START
 from .geometry import MOUNT_DEFAULTS, ROOM_DEFAULTS
 from .scenes import LAMP_MOUNT, lamp_target, position_writes
+from .fixtures import channel_info
 from .protocol import (
     MODE_RGB,
     MODE_RGBW,
@@ -89,6 +90,10 @@ class FreeDmxLight(LightEntity, RestoreEntity):
             "config_entry_id": entry.entry_id,
         }
         self._has_pos = any(t in ("P", "T", "p", "t") for t in self._layout)
+        self._entry_id = entry.entry_id
+        # dauerhaft eingestellte feste Kanäle: Index (0-basiert) -> Wert
+        self._overrides: dict[int, int] = {}
+        self._free_idx = {i for i, t in enumerate(self._layout) if isinstance(t, int) or t == "X"}
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._attr_unique_id)},
             name=lamp[LAMP_NAME],
@@ -102,6 +107,14 @@ class FreeDmxLight(LightEntity, RestoreEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         attrs = dict(self._attr_extra_state_attributes)
+        values = self._sender.get_channels(self._start, len(self._layout))
+        kanaele = channel_info(self._lamp.get("preset"), self._layout)
+        for k in kanaele:
+            k["wert"] = values[k["nr"] - 1]
+            k["grund"] = self._layout[k["nr"] - 1] if isinstance(self._layout[k["nr"] - 1], int) else None
+            k["eigen"] = (k["nr"] - 1) in self._overrides
+        attrs["kanaele"] = kanaele
+        attrs["kanal_werte"] = {str(i + 1): v for i, v in sorted(self._overrides.items())}
         if self._has_pos:
             attrs["raum"] = self._room
             attrs["montage"] = {**MOUNT_DEFAULTS, **self._lamp.get(LAMP_MOUNT, {})}
@@ -120,6 +133,9 @@ class FreeDmxLight(LightEntity, RestoreEntity):
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         self.async_on_remove(self._sender.add_listener(self._handle_connection))
+        registry = self.hass.data.setdefault(DOMAIN, {}).setdefault("lights", {})
+        registry[self._lamp[LAMP_ID]] = self
+        self.async_on_remove(lambda: registry.pop(self._lamp[LAMP_ID], None))
         if self._has_pos:
             self.async_on_remove(self._sender.add_value_listener(self._handle_values))
         last = await self.async_get_last_state()
@@ -131,6 +147,15 @@ class FreeDmxLight(LightEntity, RestoreEntity):
                 self._attr_rgb_color = tuple(int(v) for v in rgb)
             if (rgbw := last.attributes.get(ATTR_RGBW_COLOR)) and len(rgbw) == 4:
                 self._attr_rgbw_color = tuple(int(v) for v in rgbw)
+            saved = last.attributes.get("kanal_werte")
+            if isinstance(saved, dict):
+                for key, val in saved.items():
+                    try:
+                        idx = int(key) - 1
+                    except (TypeError, ValueError):
+                        continue
+                    if idx in self._free_idx:
+                        self._overrides[idx] = max(0, min(255, int(val)))
             ziel = last.attributes.get("ziel")
             if self._has_pos and isinstance(ziel, dict) and "pan" in ziel:
                 from .protocol import percent_to_16bit
@@ -170,7 +195,7 @@ class FreeDmxLight(LightEntity, RestoreEntity):
     def _target(self) -> list[int]:
         # Die aktuelle Position bleibt erhalten, auch beim Ein- und Ausschalten.
         current = self._sender.get_channels(self._start, len(self._layout))
-        return compute_values(
+        values = compute_values(
             self._layout,
             self._mode,
             bool(self._attr_is_on),
@@ -178,6 +203,23 @@ class FreeDmxLight(LightEntity, RestoreEntity):
             self._color(),
             read_position(self._layout, current),
         )
+        has_dimmer = "D" in self._layout
+        if self._attr_is_on or has_dimmer:
+            for idx, val in self._overrides.items():
+                values[idx] = val
+        return values
+
+    def set_override(self, channel: int, value: int | None) -> None:
+        """Festen Kanal (1-basiert) dauerhaft einstellen; None = Grundeinstellung."""
+        idx = channel - 1
+        if idx not in self._free_idx:
+            raise ValueError("Dieser Kanal wird über Licht bzw. Position gesteuert.")
+        if value is None:
+            self._overrides.pop(idx, None)
+        else:
+            self._overrides[idx] = max(0, min(255, int(value)))
+        self._apply(None)
+        self.async_write_ha_state()
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         if ATTR_BRIGHTNESS in kwargs:

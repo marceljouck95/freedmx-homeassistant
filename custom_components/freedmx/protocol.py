@@ -205,7 +205,8 @@ def compute_values(
     out: list[int] = []
     for token in layout:
         if isinstance(token, int):
-            out.append(token)
+            # Ohne Dimmer-Kanal (z. B. Effektgerät) bedeutet "aus": alle festen Werte auf 0
+            out.append(token if (is_on or has_dimmer) else 0)
         elif token in pos_values:
             out.append(pos_values[token])
         elif token == TOKEN_UNUSED or not is_on:

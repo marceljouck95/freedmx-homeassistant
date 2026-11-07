@@ -1,6 +1,7 @@
 /*
  * freeDMX Raum-Karte für Home Assistant
- * Version 1.2.0
+ * Version 1.3.0
+ * NEU 1.3: Tasten immer sichtbar (Plan passt sich an); Kanal-Karte freedmx-kanaele-card
  * NEU 1.2: Pfeiltasten für Pan/Tilt im Kalibrier-Modus
  * NEU 1.1: Kalibrieren – tatsächlichen Lichtpunkt im Plan antippen
  *
@@ -15,7 +16,7 @@
  * /local/freedmx-raum-card.js (JavaScript-Modul) eintragen.
  */
 
-const FR_VERSION = "1.2.0";
+const FR_VERSION = "1.3.0";
 const frEd = (sr, k) => { try { if (window.EinheitDesign) window.EinheitDesign.adopt(sr, k); else (window.__edQ = window.__edQ || []).push([sr, k]); } catch (e) { /* Design-Zentrale optional */ } };
 
 const FR_DEFAULTS = {
@@ -109,7 +110,7 @@ class FreedmxRaumCard extends HTMLElement {
           --primary-text-color:var(--ed-text,#e8eef6);--secondary-text-color:var(--ed-sub,#8c9bb0);--divider-color:var(--ed-line,rgba(255,255,255,.08));
           --ha-card-background:var(--ed-bg,linear-gradient(160deg,#0f1d2e,#0a1420));--ha-card-border-radius:var(--ed-radius,22px);
           --primary-color:var(--ed-cool,#3fc1ff); color:var(--ed-text,#e8eef6); }
-        ha-card { height:100%; box-sizing:border-box; padding:14px; display:flex; flex-direction:column; gap:10px; overflow:auto; backdrop-filter:var(--ed-blur,none);-webkit-backdrop-filter:var(--ed-blur,none); }
+        ha-card { height:100%; box-sizing:border-box; padding:14px; display:flex; flex-direction:column; gap:8px; overflow:hidden; backdrop-filter:var(--ed-blur,none);-webkit-backdrop-filter:var(--ed-blur,none); }
         .head { display:flex; align-items:center; gap:10px; justify-content:space-between; flex-wrap:wrap; }
         .title { font-size:.78rem; font-weight:600; text-transform:uppercase; letter-spacing:1.4px; color:var(--secondary-text-color); }
         .dim { font-size:.8rem; color:var(--secondary-text-color); }
@@ -118,7 +119,8 @@ class FreedmxRaumCard extends HTMLElement {
         .chip .dot { width:10px; height:10px; border-radius:50%; }
         .chip.sel { outline:2px solid var(--c); background:color-mix(in srgb, var(--c) 18%, transparent); }
         .chip.off { opacity:.55; }
-        .plan { flex:1 1 auto; min-height:140px; display:flex; }
+        .plan { flex:1 1 0; min-height:90px; display:flex; }
+        .head, .info, .ctl, .warn { flex:none; }
         svg { width:100%; height:100%; touch-action:none; user-select:none; cursor:crosshair; }
         .room { fill:color-mix(in srgb, var(--ed-tile,#ffffff) 60%, transparent); stroke:var(--ed-line2,rgba(255,255,255,.35)); stroke-width:.04; }
         .zone { fill:color-mix(in srgb, var(--ed-green,#4cd790) 9%, transparent); stroke:var(--ed-green,#4cd790); stroke-width:.03; stroke-dasharray:.12 .08; }
@@ -419,4 +421,163 @@ if (!customElements.get("freedmx-raum-card")) {
   window.customCards = window.customCards || [];
   window.customCards.push({ type: "freedmx-raum-card", name: "freeDMX Raum", description: "Grundriss mit Moving Heads: Lichtpunkt antippen oder ziehen, Bewegung auf den Raum begrenzt", preview: false });
   console.info(`%c freeDMX Raum-Karte ${FR_VERSION} `, "background:#3fc1ff;color:#000;border-radius:4px");
+}
+
+
+/* =====================================================================
+ * freeDMX Kanäle – alle DMX-Kanäle einer Lampe einstellen
+ * type: custom:freedmx-kanaele-card, entity: light.xyz
+ * ===================================================================== */
+const FK_DEFAULTS = { entity: "", title: "", show_power: true, show_ranges: true, show_controlled: true };
+
+class FreedmxKanaeleCard extends HTMLElement {
+  static getConfigElement() { return document.createElement("freedmx-kanaele-card-editor"); }
+  static getStubConfig(hass) {
+    const e = Object.keys(hass?.states || {}).find((k) => k.startsWith("light.") && hass.states[k].attributes?.kanaele);
+    return { ...FK_DEFAULTS, entity: e || "" };
+  }
+  setConfig(config) {
+    this.__rawCfg = config;
+    this._config = { ...FK_DEFAULTS, ...(config || {}) };
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: "open" });
+      frEd(this.shadowRoot, "freedmx");
+      this.shadowRoot.innerHTML = `<style>
+        :host { display:block; height:100%;
+          --primary-text-color:var(--ed-text,#e8eef6);--secondary-text-color:var(--ed-sub,#8c9bb0);
+          --ha-card-background:var(--ed-bg,linear-gradient(160deg,#0f1d2e,#0a1420));--ha-card-border-radius:var(--ed-radius,22px);
+          --primary-color:var(--ed-cool,#3fc1ff); color:var(--ed-text,#e8eef6); }
+        ha-card { height:100%; box-sizing:border-box; padding:14px; display:flex; flex-direction:column; gap:10px; overflow:hidden; backdrop-filter:var(--ed-blur,none);-webkit-backdrop-filter:var(--ed-blur,none); }
+        .head { display:flex; align-items:center; justify-content:space-between; gap:10px; flex:none; }
+        .title { font-size:1.05rem; font-weight:600; }
+        .sub { font-size:.8rem; color:var(--secondary-text-color); }
+        .list { flex:1 1 0; overflow:auto; display:flex; flex-direction:column; gap:8px; padding-right:4px; }
+        .ch { background:var(--ed-tile,rgba(255,255,255,.045)); border:1px solid var(--ed-line,rgba(255,255,255,.08)); border-radius:var(--ed-r-tile,14px); padding:10px 12px; display:flex; flex-direction:column; gap:6px; }
+        .ch.ctrl { opacity:.6; }
+        .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+        .nr { font-size:.75rem; color:var(--secondary-text-color); min-width:46px; }
+        .nm { font-weight:600; flex:1 1 auto; }
+        .val { font-variant-numeric:tabular-nums; min-width:34px; text-align:right; }
+        .tag { font-size:.72rem; border-radius:999px; padding:2px 8px; background:color-mix(in srgb, var(--ed-sun,#ffc83d) 22%, transparent); }
+        input[type=range] { flex:1 1 140px; accent-color:var(--primary-color); }
+        select { flex:1 1 180px; background:var(--ed-tile,rgba(255,255,255,.06)); color:inherit; border:1px solid var(--ed-line,rgba(255,255,255,.12)); border-radius:10px; padding:6px 8px; font:inherit; font-size:.85rem; }
+        select option { color:#000; }
+        .btn { border:1px solid var(--ed-line,rgba(255,255,255,.12)); background:var(--ed-tile,rgba(255,255,255,.045)); color:inherit; border-radius:var(--ed-r-tile,12px); padding:7px 12px; font:inherit; font-size:.85rem; cursor:pointer; }
+        .btn.on { background:color-mix(in srgb, var(--ed-sun,#ffc83d) 28%, transparent); }
+        .btn.small { padding:4px 8px; font-size:.75rem; }
+        .empty { color:var(--secondary-text-color); }
+      </style><ha-card><div class="head"><div><div class="title"></div><div class="sub"></div></div><div class="pw"></div></div><div class="list"></div></ha-card>`;
+      const sr = this.shadowRoot;
+      this.$ = { title: sr.querySelector(".title"), sub: sr.querySelector(".sub"), pw: sr.querySelector(".pw"), list: sr.querySelector(".list") };
+      this._timers = {};
+      sr.addEventListener("click", (ev) => {
+        const b = ev.target.closest("button"); if (!b) return;
+        if (b.dataset.act === "power") {
+          const st = this._hass.states[this._config.entity];
+          this._hass.callService("light", st?.state === "on" ? "turn_off" : "turn_on", { entity_id: this._config.entity });
+        } else if (b.dataset.act === "reset") this._send(Number(b.dataset.nr), null);
+      });
+      sr.addEventListener("input", (ev) => {
+        const el = ev.target; if (el.type !== "range") return;
+        const nr = Number(el.dataset.nr);
+        el.closest(".ch").querySelector(".val").textContent = el.value;
+        clearTimeout(this._timers[nr]);
+        this._timers[nr] = setTimeout(() => this._send(nr, Number(el.value)), 120);
+      });
+      sr.addEventListener("change", (ev) => {
+        const el = ev.target;
+        if (el.tagName === "SELECT" && el.value !== "") this._send(Number(el.dataset.nr), Number(el.value));
+        if (el.type === "range") { el.blur(); setTimeout(() => { this._sig = null; this._render(); }, 400); }
+      });
+    }
+    this._sig = null;
+    if (this._hass) this._render();
+  }
+  set hass(h) { this._hass = h; this._render(); }
+  getCardSize() { return 8; }
+  getGridOptions() { return { columns: 12, min_columns: 3, rows: 8, min_rows: 3 }; }
+
+  _send(nr, value) {
+    const st = this._hass.states[this._config.entity]; if (!st) return;
+    const data = { lamp_id: st.attributes.lamp_id, kanal: nr };
+    if (value !== null && value !== undefined) data.wert = value;
+    this._hass.callService("freedmx", "set_lamp_channel", data).catch((e) => { this.$.sub.textContent = `Fehler: ${e.message || e}`; });
+  }
+
+  _render() {
+    if (!this._hass || !this._config || !this.$) return;
+    const c = this._config, st = this._hass.states[c.entity];
+    const sig = JSON.stringify([st?.state, st?.attributes?.kanaele, c]);
+    if (sig === this._sig) return;
+    // nicht neu zeichnen, während ein Regler bewegt wird
+    const active = this.shadowRoot.activeElement;
+    if (active && active.type === "range" && this._sig) { this._pending = true; return; }
+    this._sig = sig;
+    if (!st || !st.attributes?.kanaele) {
+      this.$.title.textContent = c.title || "DMX-Kanäle";
+      this.$.sub.textContent = ""; this.$.pw.innerHTML = "";
+      this.$.list.innerHTML = `<div class="empty">Bitte im Karten-Editor eine freeDMX-Lampe wählen.</div>`;
+      return;
+    }
+    const a = st.attributes;
+    this.$.title.textContent = c.title || a.friendly_name || c.entity;
+    this.$.sub.textContent = `DMX ${a.dmx_kanaele} · ${st.state === "on" ? "an" : st.state === "off" ? "aus" : "nicht verfügbar"}`;
+    this.$.pw.innerHTML = c.show_power ? `<button class="btn ${st.state === "on" ? "on" : ""}" data-act="power">${st.state === "on" ? "Ausschalten" : "Einschalten"}</button>` : "";
+    const start = Number(String(a.dmx_kanaele).split("-")[0]);
+    const html = a.kanaele.filter((k) => k.frei || c.show_controlled).map((k) => {
+      const addr = start + k.nr - 1;
+      if (!k.frei) {
+        const how = { D: "über Helligkeit", R: "über Farbe", G: "über Farbe", B: "über Farbe", W: "über Farbe", P: "über Raum-Plan", T: "über Raum-Plan", p: "über Raum-Plan", t: "über Raum-Plan" }[k.rolle] || "automatisch";
+        return `<div class="ch ctrl"><div class="row"><span class="nr">K${k.nr} · ${addr}</span><span class="nm">${frEsc(k.name)}</span><span class="sub">${how}</span><span class="val">${k.wert}</span></div></div>`;
+      }
+      const cur = Number(k.wert);
+      const ranges = (c.show_ranges && k.bereiche?.length) ? k.bereiche : [];
+      const hit = ranges.find((r) => cur >= r[0] && cur <= r[1]);
+      const sel = ranges.length > 1 ? `<select data-nr="${k.nr}"><option value="">${hit ? frEsc(hit[2]) : "Funktion wählen …"}</option>${ranges.map((r) => {
+        const v = r[0] === r[1] ? r[0] : Math.round((r[0] + r[1]) / 2);
+        const v2 = /offen|aus|stopp|kein|blackout|normal|dmx-steuerung|geschlossen/i.test(r[2]) ? r[0] : v;
+        return `<option value="${v2}">${frEsc(r[2])} (${r[0]}–${r[1]})</option>`;
+      }).join("")}</select>` : (hit ? `<span class="sub">${frEsc(hit[2])}</span>` : "");
+      return `<div class="ch"><div class="row"><span class="nr">K${k.nr} · ${addr}</span><span class="nm">${frEsc(k.name)}</span>${k.eigen ? `<span class="tag">eigener Wert</span><button class="btn small" data-act="reset" data-nr="${k.nr}" title="Grundeinstellung ${k.grund ?? 0}">Zurück</button>` : ""}<span class="val">${cur}</span></div>
+        <div class="row">${sel}<input type="range" min="0" max="255" step="1" value="${cur}" data-nr="${k.nr}"></div></div>`;
+    }).join("");
+    const top = this.$.list.scrollTop;
+    this.$.list.innerHTML = html;
+    this.$.list.scrollTop = top;
+  }
+}
+
+const FK_SCHEMA = [
+  { name: "entity", label: "Lampe", selector: { entity: { domain: "light", integration: "freedmx" } } },
+  { name: "title", label: "Titel (leer = Name der Lampe)", selector: { text: {} } },
+  { type: "grid", name: "", schema: [
+    { name: "show_power", label: "Ein/Aus-Taste", selector: { boolean: {} } },
+    { name: "show_ranges", label: "Funktionsauswahl (aus der Anleitung)", selector: { boolean: {} } },
+    { name: "show_controlled", label: "Auch gesteuerte Kanäle zeigen (Dimmer, Pan/Tilt …)", selector: { boolean: {} } },
+  ] },
+];
+
+class FreedmxKanaeleCardEditor extends HTMLElement {
+  setConfig(config) { this._config = { ...FK_DEFAULTS, ...(config || {}) }; this._render(); }
+  set hass(h) { this._hass = h; if (this._form) this._form.hass = h; else this._render(); }
+  _render() {
+    if (!this._hass || !this._config) return;
+    if (!this._form) {
+      this._form = document.createElement("ha-form");
+      this._form.computeLabel = (s) => s.label || s.name;
+      this._form.addEventListener("value-changed", (ev) => {
+        this._config = { ...this._config, ...ev.detail.value };
+        this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config }, bubbles: true, composed: true }));
+      });
+      this.appendChild(this._form);
+    }
+    this._form.hass = this._hass; this._form.schema = FK_SCHEMA; this._form.data = this._config;
+  }
+}
+
+if (!customElements.get("freedmx-kanaele-card")) {
+  customElements.define("freedmx-kanaele-card", FreedmxKanaeleCard);
+  customElements.define("freedmx-kanaele-card-editor", FreedmxKanaeleCardEditor);
+  window.customCards = window.customCards || [];
+  window.customCards.push({ type: "freedmx-kanaele-card", name: "freeDMX Kanäle", description: "Alle DMX-Kanäle einer Lampe mit Funktionsauswahl aus der Anleitung", preview: false });
 }

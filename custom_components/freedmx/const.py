@@ -26,6 +26,9 @@ PRESETS: dict[str, str] = {
     "drgb": "D,R,G,B",
     "drgbw": "D,R,G,B,W",
     "par7": "D,R,G,B,0,0,0",
+    "dmh40": "P,T,0,0,0,0,0,0,0,255,D,0,p,t",
+    "fe1500": "255,164,0,0,0,0,0,30,0",
+    "ledbar5": "R,G,B,D,0",
 }
 
 SERVICE_SET_CHANNELS = "set_channels"
@@ -36,6 +39,9 @@ SERVICE_RECALL_POSITION = "recall_position"
 SERVICE_AIM = "aim"
 SERVICE_CALIBRATE = "calibrate"
 SERVICE_MOVE = "move"
+SERVICE_SET_LAMP_CHANNEL = "set_lamp_channel"
+ATTR_KANAL = "kanal"
+ATTR_WERT = "wert"
 ATTR_PAN = "pan"
 ATTR_TILT = "tilt"
 ATTR_FREE = "ohne_begrenzung"
