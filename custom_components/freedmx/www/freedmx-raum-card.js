@@ -16,7 +16,7 @@
  * /local/freedmx-raum-card.js (JavaScript-Modul) eintragen.
  */
 
-const FR_VERSION = "1.3.0";
+const FR_VERSION = "1.3.1";
 const frEd = (sr, k) => { try { if (window.EinheitDesign) window.EinheitDesign.adopt(sr, k); else (window.__edQ = window.__edQ || []).push([sr, k]); } catch (e) { /* Design-Zentrale optional */ } };
 
 const FR_DEFAULTS = {
@@ -451,7 +451,7 @@ class FreedmxKanaeleCard extends HTMLElement {
         .head { display:flex; align-items:center; justify-content:space-between; gap:10px; flex:none; }
         .title { font-size:1.05rem; font-weight:600; }
         .sub { font-size:.8rem; color:var(--secondary-text-color); }
-        .list { flex:1 1 0; overflow:auto; display:flex; flex-direction:column; gap:8px; padding-right:4px; }
+        .list { flex:1 1 auto; min-height:0; overflow:auto; display:flex; flex-direction:column; gap:8px; padding-right:4px; }
         .ch { background:var(--ed-tile,rgba(255,255,255,.045)); border:1px solid var(--ed-line,rgba(255,255,255,.08)); border-radius:var(--ed-r-tile,14px); padding:10px 12px; display:flex; flex-direction:column; gap:6px; }
         .ch.ctrl { opacity:.6; }
         .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
