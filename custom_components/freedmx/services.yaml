@@ -1,0 +1,87 @@
+set_channels:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: freedmx
+    channel:
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 512
+          mode: box
+    values:
+      required: true
+      example: "[255, 0, 128]"
+      selector:
+        object:
+
+save_scene:
+  fields:
+    name:
+      required: true
+      example: "Abend"
+      selector:
+        text:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: freedmx
+recall_scene:
+  fields:
+    scene_id:
+      required: true
+      selector:
+        text:
+delete_scene:
+  fields:
+    scene_id:
+      required: true
+      selector:
+        text:
+recall_position:
+  fields:
+    position_id:
+      required: true
+      selector:
+        text:
+    lamp_id:
+      required: false
+      selector:
+        text:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: freedmx
+
+aim:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: freedmx
+    lamp_id:
+      required: true
+      selector:
+        text:
+    x:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.05
+          unit_of_measurement: m
+    y:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.05
+          unit_of_measurement: m

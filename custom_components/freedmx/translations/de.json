@@ -1,0 +1,247 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "freeDMX einrichten",
+        "description": "Verbindung zum freeDMX AP per UDP (Werkseinstellung: 192.168.4.1, Port 10100). Während der Einrichtung muss Home Assistant mit dem WLAN des freeDMX verbunden sein.",
+        "data": {
+          "name": "Name",
+          "host": "IP-Adresse",
+          "port": "Port",
+          "bind": "Lokale IP (optional)"
+        },
+        "data_description": {
+          "host": "IP des freeDMX. Im Geräte-WLAN ist das 192.168.4.1.",
+          "port": "Werkseinstellung: 10100",
+          "bind": "Nur nötig, wenn Home Assistant mehrere Netzwerkadapter hat. Leer lassen für Standard."
+        }
+      }
+    },
+    "error": {
+      "cannot_resolve": "IP-Adresse oder Hostname ungültig.",
+      "invalid_bind": "Lokale IP ist ungültig."
+    },
+    "abort": {
+      "already_configured": "Dieses Gerät ist bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "freeDMX",
+        "menu_options": {
+          "settings": "Verbindung",
+          "add_lamp": "Lampe hinzufügen",
+          "edit_lamp": "Lampe bearbeiten",
+          "remove_lamp": "Lampen entfernen",
+          "add_position": "Position hinzufügen",
+          "remove_position": "Positionen entfernen",
+          "room": "Raum (Begrenzung)"
+        }
+      },
+      "settings": {
+        "title": "Verbindung",
+        "data": {
+          "host": "IP-Adresse",
+          "port": "Port",
+          "bind": "Lokale IP (optional)"
+        },
+        "data_description": {
+          "host": "IP des freeDMX. Im Geräte-WLAN ist das 192.168.4.1.",
+          "port": "Werkseinstellung: 10100",
+          "bind": "Nur nötig, wenn Home Assistant mehrere Netzwerkadapter hat. Leer lassen für Standard."
+        }
+      },
+      "lamp": {
+        "title": "Lampe",
+        "description": "Bereits belegte Kanäle: {used}",
+        "data": {
+          "name": "Name",
+          "start_address": "DMX-Startadresse",
+          "preset": "Kanalbelegung",
+          "custom_layout": "Eigene Belegung"
+        },
+        "data_description": {
+          "start_address": "Die an der Lampe eingestellte DMX-Adresse (1-512).",
+          "custom_layout": "Nur bei 'Eigene Belegung'. Kommagetrennt in Reihenfolge: D = Dimmer, R/G/B/W = Farben, X = ungenutzt, P/T = Pan/Tilt grob, p/t = Pan/Tilt fein, Zahl 0-255 = fester Wert. Beispiel Moving Head: P,T,0,0,0,0,0,0,0,0,D,0,p,t"
+        }
+      },
+      "edit_lamp": {
+        "title": "Lampe bearbeiten",
+        "data": {
+          "lamp": "Lampe"
+        }
+      },
+      "remove_lamp": {
+        "title": "Lampen entfernen",
+        "data": {
+          "lamps": "Zu entfernende Lampen"
+        }
+      },
+      "add_position": {
+        "title": "Position",
+        "data": {
+          "name": "Name",
+          "pan": "Pan (0-100 %)",
+          "tilt": "Tilt (0-100 %)"
+        },
+        "data_description": {
+          "pan": "0 = ganz links, 50 = Mitte, 100 = ganz rechts.",
+          "tilt": "0 = unten, 100 = oben."
+        }
+      },
+      "remove_position": {
+        "title": "Positionen entfernen",
+        "data": {
+          "positions": "Zu entfernende Positionen"
+        }
+      },
+      "room": {
+        "title": "Raum",
+        "description": "Maße des Raums. Blick von der Wand mit den Köpfen in den Raum: Breite = entlang dieser Wand, Tiefe = nach vorn. Bei aktiver Begrenzung bleibt der Lichtpunkt der Moving Heads auf dem Boden innerhalb des Raums (abzüglich Randabstand).",
+        "data": {
+          "width": "Breite",
+          "depth": "Tiefe",
+          "margin": "Randabstand",
+          "limit": "Begrenzung aktiv"
+        }
+      },
+      "lamp_mount": {
+        "title": "Montage: {name}",
+        "description": "Montageort im Raum ({width} × {depth} m). x = Abstand von der linken Wand, y = Abstand von der Wand mit den Köpfen, Höhe = über dem Boden. Ausgangspunkt: Pan/Tilt 50 % = waagerecht nach vorn. Bewegt sich der Kopf spiegelverkehrt, Umkehren einschalten; Feinkorrektur über die Versätze.",
+        "data": {
+          "x": "Abstand linke Wand (x)",
+          "y": "Abstand Kopfwand (y)",
+          "height": "Montagehöhe",
+          "pan_range": "Pan-Bereich",
+          "tilt_range": "Tilt-Bereich",
+          "pan_invert": "Pan umkehren",
+          "tilt_invert": "Tilt umkehren",
+          "pan_offset": "Pan-Versatz",
+          "tilt_offset": "Tilt-Versatz"
+        }
+      }
+    },
+    "error": {
+      "cannot_resolve": "IP-Adresse oder Hostname ungültig.",
+      "invalid_bind": "Lokale IP ist ungültig.",
+      "invalid_layout": "Ungültige Belegung. Erlaubt: D, R, G, B, W, X oder Zahlen 0-255, kommagetrennt.",
+      "out_of_range": "Die Lampe reicht über Kanal 512 hinaus.",
+      "name_required": "Bitte einen Namen eingeben."
+    }
+  },
+  "selector": {
+    "preset": {
+      "options": {
+        "dimmer": "Dimmer (1 Kanal: D)",
+        "rgb": "RGB (3 Kanäle: R,G,B)",
+        "rgbw": "RGBW (4 Kanäle: R,G,B,W)",
+        "drgb": "Dimmer + RGB (4 Kanäle: D,R,G,B)",
+        "drgbw": "Dimmer + RGBW (5 Kanäle: D,R,G,B,W)",
+        "par7": "7-Kanal-PAR (D,R,G,B, Strobe/Modus/Speed = 0)",
+        "custom": "Eigene Belegung"
+      }
+    }
+  },
+  "services": {
+    "set_channels": {
+      "name": "DMX-Kanäle setzen",
+      "description": "Setzt Rohwerte ab einem Kanal, z. B. für Nebelmaschine oder Effekte.",
+      "fields": {
+        "config_entry_id": {
+          "name": "freeDMX-Gerät",
+          "description": "Nur nötig, wenn mehrere eingerichtet sind."
+        },
+        "channel": {
+          "name": "Startkanal",
+          "description": "Erster Kanal (1-512)."
+        },
+        "values": {
+          "name": "Werte",
+          "description": "Liste von Werten 0-255, z. B. [255, 0, 128]."
+        }
+      }
+    },
+    "save_scene": {
+      "name": "Szene speichern",
+      "description": "Speichert die aktuellen DMX-Werte aller Lampen als Szene.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "Name der Szene."
+        },
+        "config_entry_id": {
+          "name": "freeDMX-Gerät",
+          "description": "Nur nötig, wenn mehrere eingerichtet sind."
+        }
+      }
+    },
+    "recall_scene": {
+      "name": "Szene abrufen",
+      "description": "Stellt die gespeicherten DMX-Werte aller Lampen wieder her.",
+      "fields": {
+        "scene_id": {
+          "name": "Szene",
+          "description": "ID der Szene (siehe Entwicklerwerkzeuge oder Speicherdatei)."
+        }
+      }
+    },
+    "delete_scene": {
+      "name": "Szene löschen",
+      "description": "Löscht eine gespeicherte Szene.",
+      "fields": {
+        "scene_id": {
+          "name": "Szene",
+          "description": "ID der Szene."
+        }
+      }
+    },
+    "recall_position": {
+      "name": "Position anfahren",
+      "description": "Fährt Pan/Tilt einer Position an. Ohne Lampe gilt sie für alle Lampen mit P/T-Kanälen.",
+      "fields": {
+        "position_id": {
+          "name": "Position",
+          "description": "ID der Position."
+        },
+        "lamp_id": {
+          "name": "Lampe",
+          "description": "Optional: nur diese Lampe."
+        },
+        "config_entry_id": {
+          "name": "freeDMX-Gerät",
+          "description": "Nur nötig, wenn mehrere eingerichtet sind."
+        }
+      }
+    },
+    "aim": {
+      "name": "Auf Bodenpunkt richten",
+      "description": "Richtet einen Moving Head auf einen Punkt am Boden (Meter). Außerhalb des Raums wird auf den Rand begrenzt.",
+      "fields": {
+        "config_entry_id": {
+          "name": "freeDMX-Gerät",
+          "description": "Nur nötig bei mehreren freeDMX."
+        },
+        "lamp_id": {
+          "name": "Lampe",
+          "description": "ID der Lampe (Attribut lamp_id der Licht-Entität)."
+        },
+        "x": {
+          "name": "x",
+          "description": "Abstand von der linken Wand in Metern."
+        },
+        "y": {
+          "name": "y",
+          "description": "Abstand von der Kopfwand in Metern."
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connection": {
+        "name": "Verbindung"
+      }
+    }
+  }
+}

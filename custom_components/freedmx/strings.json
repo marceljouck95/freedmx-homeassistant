@@ -1,0 +1,247 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up freeDMX",
+        "description": "Connects to the freeDMX AP via UDP (factory default: 192.168.4.1, port 10100). Home Assistant must be connected to the freeDMX Wi-Fi during setup.",
+        "data": {
+          "name": "Name",
+          "host": "IP address",
+          "port": "Port",
+          "bind": "Local IP (optional)"
+        },
+        "data_description": {
+          "host": "IP of the freeDMX. In its own Wi-Fi this is 192.168.4.1.",
+          "port": "Factory default: 10100",
+          "bind": "Only needed if Home Assistant has several network adapters. Leave empty for default."
+        }
+      }
+    },
+    "error": {
+      "cannot_resolve": "Invalid IP address or host name.",
+      "invalid_bind": "Local IP is invalid."
+    },
+    "abort": {
+      "already_configured": "This device is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "freeDMX",
+        "menu_options": {
+          "settings": "Connection",
+          "add_lamp": "Add lamp",
+          "edit_lamp": "Edit lamp",
+          "remove_lamp": "Remove lamps",
+          "add_position": "Add position",
+          "remove_position": "Remove positions",
+          "room": "Room (limit)"
+        }
+      },
+      "settings": {
+        "title": "Connection",
+        "data": {
+          "host": "IP address",
+          "port": "Port",
+          "bind": "Local IP (optional)"
+        },
+        "data_description": {
+          "host": "IP of the freeDMX. In its own Wi-Fi this is 192.168.4.1.",
+          "port": "Factory default: 10100",
+          "bind": "Only needed if Home Assistant has several network adapters. Leave empty for default."
+        }
+      },
+      "lamp": {
+        "title": "Lamp",
+        "description": "Channels already in use: {used}",
+        "data": {
+          "name": "Name",
+          "start_address": "DMX start address",
+          "preset": "Channel layout",
+          "custom_layout": "Custom layout"
+        },
+        "data_description": {
+          "start_address": "DMX address set on the lamp (1-512).",
+          "custom_layout": "Only for 'Custom layout'. Comma separated, in order: D = dimmer, R/G/B/W = colors, X = unused, P/T = pan/tilt coarse, p/t = pan/tilt fine, number 0-255 = fixed value. Moving head example: P,T,0,0,0,0,0,0,0,0,D,0,p,t"
+        }
+      },
+      "edit_lamp": {
+        "title": "Edit lamp",
+        "data": {
+          "lamp": "Lamp"
+        }
+      },
+      "remove_lamp": {
+        "title": "Remove lamps",
+        "data": {
+          "lamps": "Lamps to remove"
+        }
+      },
+      "add_position": {
+        "title": "Position",
+        "data": {
+          "name": "Name",
+          "pan": "Pan (0-100 %)",
+          "tilt": "Tilt (0-100 %)"
+        },
+        "data_description": {
+          "pan": "0 = far left, 50 = centre, 100 = far right.",
+          "tilt": "0 = down, 100 = up."
+        }
+      },
+      "remove_position": {
+        "title": "Remove positions",
+        "data": {
+          "positions": "Positions to remove"
+        }
+      },
+      "room": {
+        "title": "Room",
+        "description": "Room size seen from the wall with the heads: width along that wall, depth forward. With the limit on, the moving heads' floor spot stays inside the room (minus margin).",
+        "data": {
+          "width": "Width",
+          "depth": "Depth",
+          "margin": "Margin",
+          "limit": "Limit active"
+        }
+      },
+      "lamp_mount": {
+        "title": "Mounting: {name}",
+        "description": "Mounting point in the room ({width} × {depth} m). x = from left wall, y = from head wall, height = above floor. Reference: pan/tilt 50 % = horizontal forward. Use invert if the head moves mirrored; fine-tune with offsets.",
+        "data": {
+          "x": "From left wall (x)",
+          "y": "From head wall (y)",
+          "height": "Mounting height",
+          "pan_range": "Pan range",
+          "tilt_range": "Tilt range",
+          "pan_invert": "Invert pan",
+          "tilt_invert": "Invert tilt",
+          "pan_offset": "Pan offset",
+          "tilt_offset": "Tilt offset"
+        }
+      }
+    },
+    "error": {
+      "cannot_resolve": "Invalid IP address or host name.",
+      "invalid_bind": "Local IP is invalid.",
+      "invalid_layout": "Invalid layout. Allowed: D, R, G, B, W, X or numbers 0-255, comma separated.",
+      "out_of_range": "The lamp exceeds channel 512.",
+      "name_required": "Please enter a name."
+    }
+  },
+  "selector": {
+    "preset": {
+      "options": {
+        "dimmer": "Dimmer (1 channel: D)",
+        "rgb": "RGB (3 channels: R,G,B)",
+        "rgbw": "RGBW (4 channels: R,G,B,W)",
+        "drgb": "Dimmer + RGB (4 channels: D,R,G,B)",
+        "drgbw": "Dimmer + RGBW (5 channels: D,R,G,B,W)",
+        "par7": "7-channel PAR (D,R,G,B, strobe/mode/speed = 0)",
+        "custom": "Custom layout"
+      }
+    }
+  },
+  "services": {
+    "set_channels": {
+      "name": "Set DMX channels",
+      "description": "Sets raw values starting at a channel, e.g. for fog machines or effects.",
+      "fields": {
+        "config_entry_id": {
+          "name": "freeDMX device",
+          "description": "Only needed if several are configured."
+        },
+        "channel": {
+          "name": "Start channel",
+          "description": "First channel (1-512)."
+        },
+        "values": {
+          "name": "Values",
+          "description": "List of values 0-255, e.g. [255, 0, 128]."
+        }
+      }
+    },
+    "save_scene": {
+      "name": "Save scene",
+      "description": "Saves the current DMX values of all lamps as a scene.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "Name of the scene."
+        },
+        "config_entry_id": {
+          "name": "freeDMX device",
+          "description": "Only needed if several are set up."
+        }
+      }
+    },
+    "recall_scene": {
+      "name": "Recall scene",
+      "description": "Restores the saved DMX values of all lamps.",
+      "fields": {
+        "scene_id": {
+          "name": "Scene",
+          "description": "ID of the scene."
+        }
+      }
+    },
+    "delete_scene": {
+      "name": "Delete scene",
+      "description": "Deletes a saved scene.",
+      "fields": {
+        "scene_id": {
+          "name": "Scene",
+          "description": "ID of the scene."
+        }
+      }
+    },
+    "recall_position": {
+      "name": "Recall position",
+      "description": "Moves pan/tilt to a position. Without a lamp it applies to all lamps with P/T channels.",
+      "fields": {
+        "position_id": {
+          "name": "Position",
+          "description": "ID of the position."
+        },
+        "lamp_id": {
+          "name": "Lamp",
+          "description": "Optional: only this lamp."
+        },
+        "config_entry_id": {
+          "name": "freeDMX device",
+          "description": "Only needed if several are set up."
+        }
+      }
+    },
+    "aim": {
+      "name": "Aim at floor point",
+      "description": "Aims a moving head at a floor point (metres). Outside the room it is limited to the edge.",
+      "fields": {
+        "config_entry_id": {
+          "name": "freeDMX device",
+          "description": "Only needed with several freeDMX."
+        },
+        "lamp_id": {
+          "name": "Lamp",
+          "description": "Lamp id (lamp_id attribute of the light)."
+        },
+        "x": {
+          "name": "x",
+          "description": "Distance from left wall in metres."
+        },
+        "y": {
+          "name": "y",
+          "description": "Distance from head wall in metres."
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connection": {
+        "name": "Connection"
+      }
+    }
+  }
+}

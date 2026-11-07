@@ -1,0 +1,14 @@
+{
+  "domain": "freedmx",
+  "name": "Eurolite freeDMX AP",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/",
+  "integration_type": "hub",
+  "iot_class": "local_push",
+  "requirements": [],
+  "version": "0.4.0",
+  "dependencies": [
+    "http"
+  ]
+}

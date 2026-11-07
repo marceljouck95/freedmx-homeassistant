@@ -1,0 +1,301 @@
+"""Eurolite freeDMX AP (natives UDP-Protokoll) für Home Assistant."""
+
+from __future__ import annotations
+
+import logging
+
+import voluptuous as vol
+
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.const import CONF_HOST, CONF_PORT, Platform
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
+from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers.storage import Store
+from homeassistant.helpers.typing import ConfigType
+
+from .const import (
+    ATTR_CHANNEL,
+    ATTR_CONFIG_ENTRY_ID,
+    ATTR_LAMP_ID,
+    ATTR_NAME,
+    ATTR_POSITION_ID,
+    ATTR_SCENE_ID,
+    ATTR_VALUES,
+    CONF_BIND,
+    CONF_LAMPS,
+    CONF_POSITIONS,
+    CONF_ROOM,
+    ATTR_X,
+    ATTR_Y,
+    SERVICE_AIM,
+    DEFAULT_HOST,
+    DEFAULT_PORT,
+    DOMAIN,
+    POS_ID,
+    SERVICE_DELETE_SCENE,
+    SERVICE_RECALL_POSITION,
+    SERVICE_RECALL_SCENE,
+    SERVICE_SAVE_SCENE,
+    SERVICE_SET_CHANNELS,
+    STORE_KEY,
+    STORE_VERSION,
+)
+from .device import FreeDmxDevice
+from .protocol import FRAME_CHANNELS, has_position
+from .geometry import Mount, Room, aim_percent, clamp_point
+from .protocol import percent_to_16bit
+from .scenes import (
+    LAMP_MOUNT,
+    make_guard,
+    lamp_span,
+    make_scene,
+    position_16bit,
+    position_writes,
+)
+
+_LOGGER = logging.getLogger(__name__)
+
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.LIGHT]
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+SET_CHANNELS_SCHEMA = vol.Schema(
+    {
+        vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string,
+        vol.Required(ATTR_CHANNEL): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=FRAME_CHANNELS)
+        ),
+        vol.Required(ATTR_VALUES): vol.All(
+            cv.ensure_list, [vol.All(vol.Coerce(int), vol.Range(min=0, max=255))]
+        ),
+    }
+)
+
+
+SAVE_SCENE_SCHEMA = vol.Schema(
+    {
+        vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string,
+        vol.Required(ATTR_NAME): cv.string,
+    }
+)
+SCENE_ID_SCHEMA = vol.Schema({vol.Required(ATTR_SCENE_ID): cv.string})
+RECALL_POSITION_SCHEMA = vol.Schema(
+    {
+        vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string,
+        vol.Required(ATTR_POSITION_ID): cv.string,
+        vol.Optional(ATTR_LAMP_ID): cv.string,
+    }
+)
+
+AIM_SCHEMA = vol.Schema(
+    {
+        vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string,
+        vol.Required(ATTR_LAMP_ID): cv.string,
+        vol.Required(ATTR_X): vol.Coerce(float),
+        vol.Required(ATTR_Y): vol.Coerce(float),
+    }
+)
+
+
+def merged_config(entry: ConfigEntry) -> dict:
+    """Optionen überschreiben die Ersteinrichtung."""
+    return {**entry.data, **entry.options}
+
+
+def _target_entry(hass: HomeAssistant, entry_id: str | None) -> ConfigEntry:
+    loaded = [
+        e
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if e.state is ConfigEntryState.LOADED
+    ]
+    if entry_id:
+        loaded = [e for e in loaded if e.entry_id == entry_id]
+    if len(loaded) != 1:
+        raise ServiceValidationError(
+            "Bitte genau ein freeDMX-Gerät angeben (config_entry_id)."
+        )
+    return loaded[0]
+
+
+CARD_URL = "/freedmx_static/freedmx-raum-card.js"
+
+
+async def _register_card(hass: HomeAssistant) -> None:
+    """Karte aus dem Integrationsordner ausliefern (wird mit HACS mit aktualisiert)."""
+    from pathlib import Path
+
+    from homeassistant.components.http import StaticPathConfig
+
+    path = Path(__file__).parent / "www" / "freedmx-raum-card.js"
+    try:
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(CARD_URL, str(path), False)]
+        )
+    except RuntimeError:  # schon registriert (z. B. nach Neuladen)
+        pass
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Dienste registrieren: Rohwerte, Szenen und Positionen."""
+    if hass.http is not None:
+        await _register_card(hass)
+    store: Store = Store(hass, STORE_VERSION, STORE_KEY)
+    data = await store.async_load() or {}
+    scenes: list[dict] = list(data.get("scenes", []))
+    hass.data.setdefault(DOMAIN, {})["store"] = store
+    hass.data[DOMAIN]["scenes"] = scenes
+
+    async def save_scenes() -> None:
+        await store.async_save({"scenes": hass.data[DOMAIN]["scenes"]})
+
+    async def handle_set_channels(call: ServiceCall) -> None:
+        entry = _target_entry(hass, call.data.get(ATTR_CONFIG_ENTRY_ID))
+        channel = call.data[ATTR_CHANNEL]
+        values = call.data[ATTR_VALUES]
+        if channel - 1 + len(values) > FRAME_CHANNELS:
+            raise ServiceValidationError("Kanalbereich überschreitet 512.")
+        entry.runtime_data.set_channels(channel, values)
+
+    async def handle_save_scene(call: ServiceCall) -> None:
+        entry = _target_entry(hass, call.data.get(ATTR_CONFIG_ENTRY_ID))
+        lamps = merged_config(entry).get(CONF_LAMPS, [])
+        snapshots = {}
+        for lamp in lamps:
+            start, length = lamp_span(lamp)
+            snapshots[lamp["id"]] = entry.runtime_data.get_channels(start, length)
+        scene = make_scene(call.data[ATTR_NAME].strip() or "Szene", snapshots)
+        hass.data[DOMAIN]["scenes"].append(scene)
+        await save_scenes()
+
+    async def handle_recall_scene(call: ServiceCall) -> None:
+        scene_id = call.data[ATTR_SCENE_ID]
+        scene = next(
+            (s for s in hass.data[DOMAIN]["scenes"] if s["id"] == scene_id), None
+        )
+        if scene is None:
+            raise ServiceValidationError("Szene nicht gefunden.")
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if entry.state is not ConfigEntryState.LOADED:
+                continue
+            for lamp in merged_config(entry).get(CONF_LAMPS, []):
+                values = scene["channels"].get(lamp["id"])
+                start, length = lamp_span(lamp)
+                if values and len(values) == length:
+                    entry.runtime_data.set_channels(start, values)
+
+    async def handle_delete_scene(call: ServiceCall) -> None:
+        scene_id = call.data[ATTR_SCENE_ID]
+        hass.data[DOMAIN]["scenes"] = [
+            s for s in hass.data[DOMAIN]["scenes"] if s["id"] != scene_id
+        ]
+        await save_scenes()
+
+    async def handle_recall_position(call: ServiceCall) -> None:
+        entry = _target_entry(hass, call.data.get(ATTR_CONFIG_ENTRY_ID))
+        conf = merged_config(entry)
+        position = next(
+            (p for p in conf.get(CONF_POSITIONS, []) if p[POS_ID] == call.data[ATTR_POSITION_ID]),
+            None,
+        )
+        if position is None:
+            raise ServiceValidationError("Position nicht gefunden.")
+        pan_16, tilt_16 = position_16bit(position)
+        only = call.data.get(ATTR_LAMP_ID)
+        for lamp in conf.get(CONF_LAMPS, []):
+            if only and lamp["id"] != only:
+                continue
+            if not has_position(parse_layout_safe(lamp)):
+                continue
+            for channel, value in position_writes(lamp, pan_16, tilt_16):
+                entry.runtime_data.set_channels(channel, [value])
+
+    async def handle_aim(call: ServiceCall) -> None:
+        """Kopf auf einen Bodenpunkt (Meter) richten; außerhalb wird auf den Rand begrenzt."""
+        entry = _target_entry(hass, call.data.get(ATTR_CONFIG_ENTRY_ID))
+        conf = merged_config(entry)
+        lamp = next(
+            (l for l in conf.get(CONF_LAMPS, []) if l["id"] == call.data[ATTR_LAMP_ID]),
+            None,
+        )
+        if lamp is None or not has_position(parse_layout_safe(lamp)):
+            raise ServiceValidationError("Lampe ohne Pan/Tilt oder nicht gefunden.")
+        room = Room.from_dict(conf.get(CONF_ROOM))
+        mount = Mount.from_dict(lamp.get(LAMP_MOUNT))
+        x, y = call.data[ATTR_X], call.data[ATTR_Y]
+        if room.limit:
+            x, y = clamp_point(room, mount, x, y)
+        pan, tilt = aim_percent(mount, x, y)
+        for channel, value in position_writes(
+            lamp, percent_to_16bit(pan), percent_to_16bit(tilt)
+        ):
+            entry.runtime_data.set_channels(channel, [value])
+
+    hass.services.async_register(DOMAIN, SERVICE_AIM, handle_aim, schema=AIM_SCHEMA)
+    hass.services.async_register(
+        DOMAIN, SERVICE_SET_CHANNELS, handle_set_channels, schema=SET_CHANNELS_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_SAVE_SCENE, handle_save_scene, schema=SAVE_SCENE_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_RECALL_SCENE, handle_recall_scene, schema=SCENE_ID_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_DELETE_SCENE, handle_delete_scene, schema=SCENE_ID_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_RECALL_POSITION,
+        handle_recall_position,
+        schema=RECALL_POSITION_SCHEMA,
+    )
+    return True
+
+
+def parse_layout_safe(lamp: dict) -> list:
+    from .protocol import parse_layout
+
+    return parse_layout(lamp["layout"])
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    conf = merged_config(entry)
+    host = str(conf.get(CONF_HOST, DEFAULT_HOST))
+    port = int(conf.get(CONF_PORT, DEFAULT_PORT))
+    device = FreeDmxDevice(hass, host, port, conf.get(CONF_BIND) or None)
+    try:
+        await device.async_start()
+    except OSError as err:
+        raise ConfigEntryNotReady(
+            f"freeDMX {host}:{port} kann nicht geöffnet werden: {err}"
+        ) from err
+
+    entry.runtime_data = device
+    room_data = conf.get(CONF_ROOM)
+    for lamp in conf.get(CONF_LAMPS, []):
+        if (guard := make_guard(lamp, room_data)) is not None:
+            device.guards.append(guard)
+
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, entry.entry_id)},
+        name=entry.title,
+        manufacturer="Eurolite",
+        model="freeDMX AP",
+        configuration_url=f"http://{host}",
+    )
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded:
+        await entry.runtime_data.async_stop()
+    return unloaded
+
+
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    await hass.config_entries.async_reload(entry.entry_id)
