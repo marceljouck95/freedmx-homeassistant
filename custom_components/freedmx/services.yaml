@@ -85,3 +85,30 @@ aim:
           max: 100
           step: 0.05
           unit_of_measurement: m
+
+calibrate:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: freedmx
+    lamp_id:
+      required: true
+      selector:
+        text:
+    x:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.05
+          unit_of_measurement: m
+    y:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.05
+          unit_of_measurement: m

@@ -235,6 +235,28 @@
           "description": "Distance from head wall in metres."
         }
       }
+    },
+    "calibrate": {
+      "name": "Calibrate",
+      "description": "Where is the light spot actually? Pan and tilt offsets are computed from this floor point (metres) and saved.",
+      "fields": {
+        "config_entry_id": {
+          "name": "freeDMX device",
+          "description": "Only needed with several freeDMX."
+        },
+        "lamp_id": {
+          "name": "Lamp",
+          "description": "Lamp id (lamp_id attribute of the light)."
+        },
+        "x": {
+          "name": "x",
+          "description": "Distance from left wall in metres."
+        },
+        "y": {
+          "name": "y",
+          "description": "Distance from head wall in metres."
+        }
+      }
     }
   },
   "entity": {

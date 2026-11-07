@@ -183,3 +183,21 @@ def limit_percent(
     cx, cy = clamp_point(room, mount, x, y)
     new_pan, new_tilt = aim_percent(mount, cx, cy)
     return new_pan, new_tilt, cx, cy
+
+
+def calibrate_offsets(
+    mount: Mount, pan: float, tilt: float, x: float, y: float
+) -> tuple[float, float]:
+    """Versätze so bestimmen, dass (Pan %, Tilt %) genau auf den gemessenen Bodenpunkt zeigt.
+
+    Rückgabe: (pan_offset, tilt_offset) in Grad. Bereiche und Umkehrung bleiben unverändert.
+    """
+    dx, dy = x - mount.x, y - mount.y
+    horiz = math.hypot(dx, dy)
+    a = math.degrees(math.atan2(dx, dy)) if horiz > 1e-6 else 0.0
+    e = math.degrees(math.atan2(mount.height, horiz))
+    pan_cmd = (pan - 50.0) / 100.0 * mount.pan_range
+    tilt_cmd = (tilt - 50.0) / 100.0 * mount.tilt_range
+    pan_offset = _wrap180(pan_cmd - (-a if mount.pan_invert else a))
+    tilt_offset = _wrap180(tilt_cmd - (-e if mount.tilt_invert else e))
+    return round(pan_offset, 2), round(tilt_offset, 2)

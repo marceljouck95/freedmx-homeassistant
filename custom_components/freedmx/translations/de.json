@@ -235,6 +235,28 @@
           "description": "Abstand von der Kopfwand in Metern."
         }
       }
+    },
+    "calibrate": {
+      "name": "Kalibrieren",
+      "description": "Wo liegt der Lichtpunkt gerade wirklich? Aus diesem Bodenpunkt (Meter) werden Pan- und Tilt-Versatz berechnet und gespeichert.",
+      "fields": {
+        "config_entry_id": {
+          "name": "freeDMX-Gerät",
+          "description": "Nur nötig bei mehreren freeDMX."
+        },
+        "lamp_id": {
+          "name": "Lampe",
+          "description": "ID der Lampe (Attribut lamp_id der Licht-Entität)."
+        },
+        "x": {
+          "name": "x",
+          "description": "Abstand von der linken Wand in Metern."
+        },
+        "y": {
+          "name": "y",
+          "description": "Abstand von der Kopfwand in Metern."
+        }
+      }
     }
   },
   "entity": {

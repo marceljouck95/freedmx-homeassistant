@@ -1,6 +1,7 @@
 /*
  * freeDMX Raum-Karte für Home Assistant
- * Version 1.0.1
+ * Version 1.1.0
+ * NEU 1.1: Kalibrieren – tatsächlichen Lichtpunkt im Plan antippen
  *
  * - Grundriss des Raums (Maße aus der freeDMX-Integration: Konfigurieren → Raum)
  * - Moving Heads an ihrem Montageort, Lichtpunkt live auf dem Boden
@@ -13,7 +14,7 @@
  * /local/freedmx-raum-card.js (JavaScript-Modul) eintragen.
  */
 
-const FR_VERSION = "1.0.1";
+const FR_VERSION = "1.1.0";
 const frEd = (sr, k) => { try { if (window.EinheitDesign) window.EinheitDesign.adopt(sr, k); else (window.__edQ = window.__edQ || []).push([sr, k]); } catch (e) { /* Design-Zentrale optional */ } };
 
 const FR_DEFAULTS = {
@@ -166,10 +167,20 @@ class FreedmxRaumCard extends HTMLElement {
     svg.addEventListener("pointerdown", (ev) => {
       const p = pt(ev); if (!p) return;
       this._drag = true; svg.setPointerCapture(ev.pointerId);
+      if (this._cal) { this._ghost = p; this._render(true); return; }
       this._aim(p, true);
     });
-    svg.addEventListener("pointermove", (ev) => { if (!this._drag) return; const p = pt(ev); if (p) this._aim(p, false); });
-    const end = (ev) => { if (!this._drag) return; this._drag = false; const p = pt(ev); if (p) this._aim(p, true); setTimeout(() => { this._ghost = null; this._render(true); }, 900); };
+    svg.addEventListener("pointermove", (ev) => {
+      if (!this._drag) return; const p = pt(ev); if (!p) return;
+      if (this._cal) { this._ghost = p; this._render(true); return; }
+      this._aim(p, false);
+    });
+    const end = (ev) => {
+      if (!this._drag) return; this._drag = false; const p = pt(ev);
+      if (this._cal) { if (p) this._calibrate(p); return; }
+      if (p) this._aim(p, true);
+      setTimeout(() => { this._ghost = null; this._render(true); }, 900);
+    };
     svg.addEventListener("pointerup", end);
     svg.addEventListener("pointercancel", () => { this._drag = false; });
 
@@ -186,6 +197,8 @@ class FreedmxRaumCard extends HTMLElement {
       if (b.dataset.act === "toggle") {
         const anyOn = this._heads().some((x) => this._sel.has(x.id) && x.on);
         this._hass.callService("light", anyOn ? "turn_off" : "turn_on", { entity_id: ids });
+      } else if (b.dataset.act === "cal") {
+        this._cal = !this._cal; this._ghost = null; this._ctlBuilt = false; this._render(true);
       } else if (b.dataset.act === "center") {
         const r = this._heads()[0]?.room; if (r) this._aim({ x: r.width / 2, y: r.depth / 2 }, true);
       }
@@ -214,6 +227,18 @@ class FreedmxRaumCard extends HTMLElement {
       if (h.entry) data.config_entry_id = h.entry;
       this._hass.callService("freedmx", "aim", data).catch((e) => { this.$.warn.textContent = `Fehler: ${e.message || e}`; });
     }
+  }
+
+  _calibrate(p) {
+    const h = this._heads().find((x) => this._sel.has(x.id));
+    this._cal = false; this._ctlBuilt = false;
+    if (!h) { this._render(true); return; }
+    const r = h.room;
+    const data = { lamp_id: h.lamp, x: Math.round(Math.max(0, Math.min(r.width, p.x)) * 100) / 100, y: Math.round(Math.max(0, Math.min(r.depth, p.y)) * 100) / 100 };
+    if (h.entry) data.config_entry_id = h.entry;
+    this._hass.callService("freedmx", "calibrate", data)
+      .then(() => { this._note = `${h.name} kalibriert – die Integration lädt kurz neu.`; setTimeout(() => { this._note = ""; this._ghost = null; this._render(true); }, 6000); this._render(true); })
+      .catch((e) => { this._note = `Fehler: ${e.message || e}`; this._render(true); });
   }
 
   /* ---------- Zeichnen ---------- */
@@ -279,7 +304,10 @@ class FreedmxRaumCard extends HTMLElement {
       s += `<rect class="headm" x="${hx - sz}" y="${hy - sz}" width="${sz * 2}" height="${sz * 2}" rx="${sz * 0.4}" fill="${h.color}" ${this._sel.has(h.id) ? "" : 'fill-opacity=".55"'}/>`;
       if (c.show_labels) s += `<text class="lbl" x="${hx}" y="${hy + sz * 2.8}" text-anchor="middle">${frEsc(h.name)}</text>`;
     }
-    if (this._ghost) {
+    if (this._ghost && this._cal) {
+      const [u, v] = P(this._ghost.x, this._ghost.y);
+      s += `<g stroke="#fff" stroke-width=".04"><line x1="${u - sz * 2}" y1="${v}" x2="${u + sz * 2}" y2="${v}"/><line x1="${u}" y1="${v - sz * 2}" x2="${u}" y2="${v + sz * 2}"/></g>`;
+    } else if (this._ghost) {
       for (const h of heads.filter((x) => this._sel.has(x.id))) {
         const [gx, gy] = r.limit ? frClamp({ width: W, depth: D, margin: M }, h.mount, this._ghost.x, this._ghost.y) : [this._ghost.x, this._ghost.y];
         const [u, v] = P(gx, gy);
@@ -306,6 +334,7 @@ class FreedmxRaumCard extends HTMLElement {
       if (!this._ctlBuilt || this._ctlOn !== anyOn) {
         this.$.ctl.innerHTML = `<button class="btn ${anyOn ? "on" : ""}" data-act="toggle">${anyOn ? "Aus" : "Ein"}</button>
           <button class="btn" data-act="center">Raummitte</button>
+          <button class="btn ${this._cal ? "on" : ""}" data-act="cal">${this._cal ? "Abbrechen" : "Kalibrieren"}</button>
           <input type="range" min="1" max="100" step="1" value="${bri || 100}" title="Helligkeit">`;
         this._ctlBuilt = true; this._ctlOn = anyOn;
       } else {
@@ -315,6 +344,8 @@ class FreedmxRaumCard extends HTMLElement {
     } else { this.$.ctl.innerHTML = ""; this._ctlBuilt = false; }
 
     const unset = heads.filter((x) => !x.set).map((x) => x.name);
+    if (this._cal) { this.$.warn.textContent = `Kalibrieren: Tippe im Plan genau dorthin, wo der Lichtpunkt von ${cur?.name || "dem Kopf"} gerade wirklich auf dem Boden liegt.`; return; }
+    if (this._note) { this.$.warn.textContent = this._note; return; }
     this.$.warn.textContent = unset.length
       ? `Montage nicht eingestellt (Platzhalter): ${unset.join(", ")} – Einstellungen → freeDMX → Konfigurieren → Lampe bearbeiten.`
       : (heads.some((x) => !x.available) ? "freeDMX nicht verbunden." : "");

@@ -230,6 +230,20 @@ def test_guard_corrects_buffer():
     assert sc.make_guard({k: v for k, v in lamp.items() if k != "mount"}, None) is None
 
 
+
+def test_calibration_recovers_offsets():
+    real = g.Mount(x=1.0, y=0.3, height=2.3, pan_offset=-70.0, tilt_offset=19.0)
+    assumed = g.Mount(x=1.0, y=0.3, height=2.3)
+    pan, tilt = g.aim_percent(assumed, 1.0, 3.3)          # Befehl mit falschen Annahmen
+    rx, ry, hit = g.floor_point(real, pan, tilt)          # dort landet der Punkt wirklich
+    po, to = g.calibrate_offsets(assumed, pan, tilt, rx, ry)
+    assert abs(po + 70.0) < 0.05 and abs(to - 19.0) < 0.05, (po, to)
+    fixed = g.Mount(x=1.0, y=0.3, height=2.3, pan_offset=po, tilt_offset=to)
+    p2, t2 = g.aim_percent(fixed, 2.0, 6.0)
+    fx, fy, _ = g.floor_point(real, p2, t2)
+    assert abs(fx - 2.0) < 0.02 and abs(fy - 6.0) < 0.02
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

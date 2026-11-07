@@ -29,6 +29,7 @@ from .const import (
     ATTR_X,
     ATTR_Y,
     SERVICE_AIM,
+    SERVICE_CALIBRATE,
     DEFAULT_HOST,
     DEFAULT_PORT,
     DOMAIN,
@@ -43,7 +44,16 @@ from .const import (
 )
 from .device import FreeDmxDevice
 from .protocol import FRAME_CHANNELS, has_position
-from .geometry import Mount, Room, aim_percent, clamp_point
+from .geometry import (
+    MOUNT_DEFAULTS,
+    MOUNT_PAN_OFFSET,
+    MOUNT_TILT_OFFSET,
+    Mount,
+    Room,
+    aim_percent,
+    calibrate_offsets,
+    clamp_point,
+)
 from .protocol import percent_to_16bit
 from .scenes import (
     LAMP_MOUNT,
@@ -230,7 +240,43 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         ):
             entry.runtime_data.set_channels(channel, [value])
 
+    async def handle_calibrate(call: ServiceCall) -> None:
+        """Gemessenen Lichtpunkt (Meter) übernehmen und Pan/Tilt-Versatz daraus berechnen."""
+        from .protocol import POSITION_MAX, parse_layout, read_position
+
+        entry = _target_entry(hass, call.data.get(ATTR_CONFIG_ENTRY_ID))
+        conf = merged_config(entry)
+        lamps = [dict(l) for l in conf.get(CONF_LAMPS, [])]
+        lamp = next((l for l in lamps if l["id"] == call.data[ATTR_LAMP_ID]), None)
+        if lamp is None or not has_position(parse_layout_safe(lamp)):
+            raise ServiceValidationError("Lampe ohne Pan/Tilt oder nicht gefunden.")
+        layout = parse_layout(lamp["layout"])
+        start = int(lamp["start_address"])
+        current = read_position(layout, entry.runtime_data.get_channels(start, len(layout)))
+        if current is None:
+            raise ServiceValidationError("Aktuelle Position unbekannt.")
+        mount_data = {**MOUNT_DEFAULTS, **lamp.get(LAMP_MOUNT, {})}
+        pan_off, tilt_off = calibrate_offsets(
+            Mount.from_dict(mount_data),
+            current[0] / POSITION_MAX * 100,
+            current[1] / POSITION_MAX * 100,
+            call.data[ATTR_X],
+            call.data[ATTR_Y],
+        )
+        lamp[LAMP_MOUNT] = {**mount_data, MOUNT_PAN_OFFSET: pan_off, MOUNT_TILT_OFFSET: tilt_off}
+        _LOGGER.warning(
+            "freeDMX %s kalibriert: Pan-Versatz %.1f°, Tilt-Versatz %.1f°",
+            lamp.get("name"), pan_off, tilt_off,
+        )
+        hass.config_entries.async_update_entry(
+            entry,
+            options={**entry.options, CONF_LAMPS: [lamp if l["id"] == lamp["id"] else l for l in lamps]},
+        )
+
     hass.services.async_register(DOMAIN, SERVICE_AIM, handle_aim, schema=AIM_SCHEMA)
+    hass.services.async_register(
+        DOMAIN, SERVICE_CALIBRATE, handle_calibrate, schema=AIM_SCHEMA
+    )
     hass.services.async_register(
         DOMAIN, SERVICE_SET_CHANNELS, handle_set_channels, schema=SET_CHANNELS_SCHEMA
     )
