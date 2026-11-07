@@ -99,7 +99,6 @@ class FreeDmxLight(LightEntity, RestoreEntity):
             name=lamp[LAMP_NAME],
             manufacturer="DMX",
             model=f"Kanal {self._start}-{end} ({layout_to_text(self._layout)})",
-            via_device=(DOMAIN, entry.entry_id),
         )
         self._fade_task: asyncio.Task | None = None
         self._last_pos: tuple[int, int] | None = None
