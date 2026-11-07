@@ -118,7 +118,9 @@
           "pan_invert": "Invert pan",
           "tilt_invert": "Invert tilt",
           "pan_offset": "Pan offset",
-          "tilt_offset": "Tilt offset"
+          "tilt_offset": "Tilt offset",
+          "home_pan": "Home pan (when off)",
+          "home_tilt": "Home tilt (when off)"
         }
       }
     },
@@ -314,6 +316,22 @@
     "binary_sensor": {
       "connection": {
         "name": "Connection"
+      }
+    },
+    "select": {
+      "muster": {
+        "name": "Movement pattern"
+      },
+      "modus": {
+        "name": "Pattern mode"
+      }
+    },
+    "number": {
+      "tempo": {
+        "name": "Pattern speed"
+      },
+      "groesse": {
+        "name": "Pattern size"
       }
     }
   }

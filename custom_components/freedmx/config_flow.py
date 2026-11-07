@@ -61,6 +61,8 @@ from .geometry import (
     MOUNT_TILT_INVERT,
     MOUNT_TILT_OFFSET,
     MOUNT_TILT_RANGE,
+    MOUNT_HOME_PAN,
+    MOUNT_HOME_TILT,
     MOUNT_X,
     MOUNT_Y,
     ROOM_DEFAULTS,
@@ -382,6 +384,8 @@ class FreeDmxOptionsFlow(OptionsFlow):
                 MOUNT_TILT_INVERT: bool(user_input.get(MOUNT_TILT_INVERT, False)),
                 MOUNT_PAN_OFFSET: float(user_input.get(MOUNT_PAN_OFFSET, 0)),
                 MOUNT_TILT_OFFSET: float(user_input.get(MOUNT_TILT_OFFSET, 0)),
+                MOUNT_HOME_PAN: float(user_input.get(MOUNT_HOME_PAN, 50)),
+                MOUNT_HOME_TILT: float(user_input.get(MOUNT_HOME_TILT, 50)),
             }
             lamps = [l for l in self._lamps if l[LAMP_ID] != lamp[LAMP_ID]]
             lamps.append(lamp)
@@ -405,6 +409,8 @@ class FreeDmxOptionsFlow(OptionsFlow):
                 vol.Optional(MOUNT_TILT_INVERT): BooleanSelector(),
                 vol.Optional(MOUNT_PAN_OFFSET): _numf(-360, 360, 0.5, "°"),
                 vol.Optional(MOUNT_TILT_OFFSET): _numf(-180, 180, 0.5, "°"),
+                vol.Optional(MOUNT_HOME_PAN): _numf(0, 100, 0.5, "%"),
+                vol.Optional(MOUNT_HOME_TILT): _numf(0, 100, 0.5, "%"),
             }
         )
         return self.async_show_form(

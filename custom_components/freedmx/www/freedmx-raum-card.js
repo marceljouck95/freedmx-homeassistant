@@ -16,7 +16,7 @@
  * /local/freedmx-raum-card.js (JavaScript-Modul) eintragen.
  */
 
-const FR_VERSION = "1.3.1";
+const FR_VERSION = "1.4.0";
 const frEd = (sr, k) => { try { if (window.EinheitDesign) window.EinheitDesign.adopt(sr, k); else (window.__edQ = window.__edQ || []).push([sr, k]); } catch (e) { /* Design-Zentrale optional */ } };
 
 const FR_DEFAULTS = {
@@ -271,7 +271,7 @@ class FreedmxRaumCard extends HTMLElement {
       this.$.chips.innerHTML = "";
       this.$.svg.innerHTML = "";
       this.$.info.innerHTML = `<div class="empty">Keine Moving Heads mit Montagedaten gefunden. Lampe mit Pan/Tilt in der freeDMX-Integration anlegen (Konfigurieren → Lampe bearbeiten).</div>`;
-      this.$.ctl.innerHTML = ""; this.$.warn.textContent = "";
+      this.$.ctl.innerHTML = ""; this._ctlKey = null; this.$.warn.textContent = "";
       return;
     }
     if (![...this._sel].some((id) => heads.find((x) => x.id === id))) this._sel = new Set([heads[0].id]);
@@ -346,26 +346,24 @@ class FreedmxRaumCard extends HTMLElement {
     if (c.show_controls) {
       const anyOn = heads.some((x) => this._sel.has(x.id) && x.on);
       const bri = Math.round(((cur?.bri || 0) / 255) * 100);
-      if (this._cal) {
-        if (!this._ctlBuilt) {
-          const st = Number(this._step || 2);
-          this.$.ctl.innerHTML = `<button class="btn on" data-act="cal">Abbrechen</button>
-            <button class="btn" data-act="jog" data-d="pan-">◀ Pan</button><button class="btn" data-act="jog" data-d="pan+">Pan ▶</button>
-            <button class="btn" data-act="jog" data-d="tilt-">▲ Tilt</button><button class="btn" data-act="jog" data-d="tilt+">Tilt ▼</button>
-            ${[0.5, 2, 10].map((v) => `<button class="btn ${st === v ? "on" : ""}" data-act="step" data-v="${v}">${String(v).replace(".", ",")} %</button>`).join("")}`;
-          this._ctlBuilt = true;
-        }
-      } else if (!this._ctlBuilt || this._ctlOn !== anyOn) {
-        this.$.ctl.innerHTML = `<button class="btn ${anyOn ? "on" : ""}" data-act="toggle">${anyOn ? "Aus" : "Ein"}</button>
-          <button class="btn" data-act="center">Raummitte</button>
-          <button class="btn ${this._cal ? "on" : ""}" data-act="cal">${this._cal ? "Abbrechen" : "Kalibrieren"}</button>
-          <input type="range" min="1" max="100" step="1" value="${bri || 100}" title="Helligkeit">`;
-        this._ctlBuilt = true; this._ctlOn = anyOn;
-      } else {
+      const st = Number(this._step || 2);
+      const key = JSON.stringify([this._cal, anyOn, st]);
+      if (this._ctlKey !== key || !this.$.ctl.firstElementChild) {
+        this._ctlKey = key;
+        this.$.ctl.innerHTML = this._cal
+          ? `<button class="btn on" data-act="cal">Abbrechen</button>
+             <button class="btn" data-act="jog" data-d="pan-">◀ Pan</button><button class="btn" data-act="jog" data-d="pan+">Pan ▶</button>
+             <button class="btn" data-act="jog" data-d="tilt-">▲ Tilt</button><button class="btn" data-act="jog" data-d="tilt+">Tilt ▼</button>
+             ${[0.5, 2, 10].map((v) => `<button class="btn ${st === v ? "on" : ""}" data-act="step" data-v="${v}">${String(v).replace(".", ",")} %</button>`).join("")}`
+          : `<button class="btn ${anyOn ? "on" : ""}" data-act="toggle">${anyOn ? "Aus" : "Ein"}</button>
+             <button class="btn" data-act="center">Raummitte</button>
+             <button class="btn" data-act="cal">Kalibrieren</button>
+             <input type="range" min="1" max="100" step="1" value="${bri || 100}" title="Helligkeit">`;
+      } else if (!this._cal) {
         const rg = this.$.ctl.querySelector("input[type=range]");
         if (rg && this.shadowRoot.activeElement !== rg && bri) rg.value = bri;
       }
-    } else { this.$.ctl.innerHTML = ""; this._ctlBuilt = false; }
+    } else { this.$.ctl.innerHTML = ""; this._ctlKey = null; }
 
     const unset = heads.filter((x) => !x.set).map((x) => x.name);
     if (this._cal) { this.$.warn.textContent = `Kalibrieren ${cur?.name || ""}: Lichtpunkt mit den Pfeilen auf eine gut sichtbare Stelle am Boden fahren (Begrenzung ist dabei aus), dann im Plan genau auf diese Stelle tippen.`; return; }
@@ -466,6 +464,8 @@ class FreedmxKanaeleCard extends HTMLElement {
         .btn.on { background:color-mix(in srgb, var(--ed-sun,#ffc83d) 28%, transparent); }
         .btn.small { padding:4px 8px; font-size:.75rem; }
         .empty { color:var(--secondary-text-color); }
+        .list { -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
+        input.num { width:64px; background:var(--ed-tile,rgba(255,255,255,.06)); color:inherit; border:1px solid var(--ed-line,rgba(255,255,255,.12)); border-radius:8px; padding:5px 6px; font:inherit; text-align:center; }
       </style><ha-card><div class="head"><div><div class="title"></div><div class="sub"></div></div><div class="pw"></div></div><div class="list"></div></ha-card>`;
       const sr = this.shadowRoot;
       this.$ = { title: sr.querySelector(".title"), sub: sr.querySelector(".sub"), pw: sr.querySelector(".pw"), list: sr.querySelector(".list") };
@@ -476,26 +476,39 @@ class FreedmxKanaeleCard extends HTMLElement {
           const st = this._hass.states[this._config.entity];
           this._hass.callService("light", st?.state === "on" ? "turn_off" : "turn_on", { entity_id: this._config.entity });
         } else if (b.dataset.act === "reset") this._send(Number(b.dataset.nr), null);
+        else if (b.dataset.act === "inc" || b.dataset.act === "dec") {
+          const nr = Number(b.dataset.nr), box = b.closest(".ch");
+          const nu = box.querySelector("input.num"), rg = box.querySelector("input[type=range]");
+          const v = Math.max(0, Math.min(255, Number(nu.value || 0) + (b.dataset.act === "inc" ? 1 : -1)));
+          nu.value = v; rg.value = v; this._queue(nr, v);
+        }
       });
       sr.addEventListener("input", (ev) => {
-        const el = ev.target; if (el.type !== "range") return;
-        const nr = Number(el.dataset.nr);
-        el.closest(".ch").querySelector(".val").textContent = el.value;
-        clearTimeout(this._timers[nr]);
-        this._timers[nr] = setTimeout(() => this._send(nr, Number(el.value)), 120);
+        const el = ev.target; if (el.type !== "range" && !el.classList.contains("num")) return;
+        const nr = Number(el.dataset.nr), box = el.closest(".ch");
+        const v = Math.max(0, Math.min(255, Math.round(Number(el.value) || 0)));
+        if (el.type === "range") box.querySelector("input.num").value = v; else box.querySelector("input[type=range]").value = v;
+        this._queue(nr, v);
       });
       sr.addEventListener("change", (ev) => {
         const el = ev.target;
-        if (el.tagName === "SELECT" && el.value !== "") this._send(Number(el.dataset.nr), Number(el.value));
-        if (el.type === "range") { el.blur(); setTimeout(() => { this._sig = null; this._render(); }, 400); }
+        if (el.tagName === "SELECT" && el.value !== "") { this._queue(Number(el.dataset.nr), Number(el.value)); el.value = ""; }
+        if (el.type === "range") el.blur();
       });
     }
-    this._sig = null;
+    this._skey = null; this._pwKey = null;
     if (this._hass) this._render();
   }
   set hass(h) { this._hass = h; this._render(); }
   getCardSize() { return 8; }
   getGridOptions() { return { columns: 12, min_columns: 3, rows: 8, min_rows: 3 }; }
+
+  _queue(nr, v) {
+    this._busy = this._busy || {};
+    this._busy[nr] = true;
+    clearTimeout(this._timers[nr]);
+    this._timers[nr] = setTimeout(() => { this._send(nr, v); setTimeout(() => { this._busy[nr] = false; }, 600); }, 120);
+  }
 
   _send(nr, value) {
     const st = this._hass.states[this._config.entity]; if (!st) return;
@@ -507,13 +520,8 @@ class FreedmxKanaeleCard extends HTMLElement {
   _render() {
     if (!this._hass || !this._config || !this.$) return;
     const c = this._config, st = this._hass.states[c.entity];
-    const sig = JSON.stringify([st?.state, st?.attributes?.kanaele, c]);
-    if (sig === this._sig) return;
-    // nicht neu zeichnen, während ein Regler bewegt wird
-    const active = this.shadowRoot.activeElement;
-    if (active && active.type === "range" && this._sig) { this._pending = true; return; }
-    this._sig = sig;
     if (!st || !st.attributes?.kanaele) {
+      this._skey = null;
       this.$.title.textContent = c.title || "DMX-Kanäle";
       this.$.sub.textContent = ""; this.$.pw.innerHTML = "";
       this.$.list.innerHTML = `<div class="empty">Bitte im Karten-Editor eine freeDMX-Lampe wählen.</div>`;
@@ -522,28 +530,43 @@ class FreedmxKanaeleCard extends HTMLElement {
     const a = st.attributes;
     this.$.title.textContent = c.title || a.friendly_name || c.entity;
     this.$.sub.textContent = `DMX ${a.dmx_kanaele} · ${st.state === "on" ? "an" : st.state === "off" ? "aus" : "nicht verfügbar"}`;
-    this.$.pw.innerHTML = c.show_power ? `<button class="btn ${st.state === "on" ? "on" : ""}" data-act="power">${st.state === "on" ? "Ausschalten" : "Einschalten"}</button>` : "";
+    const pwKey = st.state;
+    if (this._pwKey !== pwKey) {
+      this._pwKey = pwKey;
+      this.$.pw.innerHTML = c.show_power ? `<button class="btn ${st.state === "on" ? "on" : ""}" data-act="power">${st.state === "on" ? "Ausschalten" : "Einschalten"}</button>` : "";
+    }
     const start = Number(String(a.dmx_kanaele).split("-")[0]);
-    const html = a.kanaele.filter((k) => k.frei || c.show_controlled).map((k) => {
-      const addr = start + k.nr - 1;
-      if (!k.frei) {
-        const how = { D: "über Helligkeit", R: "über Farbe", G: "über Farbe", B: "über Farbe", W: "über Farbe", P: "über Raum-Plan", T: "über Raum-Plan", p: "über Raum-Plan", t: "über Raum-Plan" }[k.rolle] || "automatisch";
-        return `<div class="ch ctrl"><div class="row"><span class="nr">K${k.nr} · ${addr}</span><span class="nm">${frEsc(k.name)}</span><span class="sub">${how}</span><span class="val">${k.wert}</span></div></div>`;
-      }
+    const list = a.kanaele.filter((k) => k.frei || c.show_controlled);
+    const skey = JSON.stringify([c.entity, c.show_ranges, c.show_controlled, list.map((k) => [k.nr, k.name, k.frei, k.bereiche?.length])]);
+    if (this._skey !== skey) {
+      // Aufbau nur bei neuer Lampe/Einstellung – danach werden nur Werte aktualisiert (flüssiges Scrollen)
+      this._skey = skey;
+      this.$.list.innerHTML = list.map((k) => {
+        const addr = start + k.nr - 1;
+        if (!k.frei) {
+          const how = { D: "über Helligkeit", R: "über Farbe", G: "über Farbe", B: "über Farbe", W: "über Farbe", P: "über Raum-Plan", T: "über Raum-Plan", p: "über Raum-Plan", t: "über Raum-Plan" }[k.rolle] || "automatisch";
+          return `<div class="ch ctrl" data-nr="${k.nr}"><div class="row"><span class="nr">K${k.nr} · ${addr}</span><span class="nm">${frEsc(k.name)}</span><span class="sub">${how}</span><span class="val"></span></div></div>`;
+        }
+        const ranges = (c.show_ranges && k.bereiche?.length > 1) ? k.bereiche : [];
+        const sel = ranges.length ? `<select data-nr="${k.nr}"><option value="">Funktion wählen …</option>${ranges.map((r) => `<option value="${r[0]}">${frEsc(r[2])} (${r[0]}–${r[1]})</option>`).join("")}</select>` : "";
+        return `<div class="ch" data-nr="${k.nr}"><div class="row"><span class="nr">K${k.nr} · ${addr}</span><span class="nm">${frEsc(k.name)}</span><span class="fn sub"></span><span class="tag" hidden>eigener Wert</span><button class="btn small" data-act="reset" data-nr="${k.nr}" hidden>Zurück</button></div>
+          <div class="row">${sel}</div>
+          <div class="row"><button class="btn small" data-act="dec" data-nr="${k.nr}">−</button><input type="number" min="0" max="255" step="1" data-nr="${k.nr}" class="num"><button class="btn small" data-act="inc" data-nr="${k.nr}">+</button><input type="range" min="0" max="255" step="1" data-nr="${k.nr}"></div></div>`;
+      }).join("");
+    }
+    const act = this.shadowRoot.activeElement;
+    for (const k of list) {
+      const box = this.$.list.querySelector(`.ch[data-nr="${k.nr}"]`); if (!box) continue;
       const cur = Number(k.wert);
-      const ranges = (c.show_ranges && k.bereiche?.length) ? k.bereiche : [];
-      const hit = ranges.find((r) => cur >= r[0] && cur <= r[1]);
-      const sel = ranges.length > 1 ? `<select data-nr="${k.nr}"><option value="">${hit ? frEsc(hit[2]) : "Funktion wählen …"}</option>${ranges.map((r) => {
-        const v = r[0] === r[1] ? r[0] : Math.round((r[0] + r[1]) / 2);
-        const v2 = /offen|aus|stopp|kein|blackout|normal|dmx-steuerung|geschlossen/i.test(r[2]) ? r[0] : v;
-        return `<option value="${v2}">${frEsc(r[2])} (${r[0]}–${r[1]})</option>`;
-      }).join("")}</select>` : (hit ? `<span class="sub">${frEsc(hit[2])}</span>` : "");
-      return `<div class="ch"><div class="row"><span class="nr">K${k.nr} · ${addr}</span><span class="nm">${frEsc(k.name)}</span>${k.eigen ? `<span class="tag">eigener Wert</span><button class="btn small" data-act="reset" data-nr="${k.nr}" title="Grundeinstellung ${k.grund ?? 0}">Zurück</button>` : ""}<span class="val">${cur}</span></div>
-        <div class="row">${sel}<input type="range" min="0" max="255" step="1" value="${cur}" data-nr="${k.nr}"></div></div>`;
-    }).join("");
-    const top = this.$.list.scrollTop;
-    this.$.list.innerHTML = html;
-    this.$.list.scrollTop = top;
+      if (!k.frei) { box.querySelector(".val").textContent = cur; continue; }
+      const hit = (k.bereiche || []).find((r) => cur >= r[0] && cur <= r[1]);
+      box.querySelector(".fn").textContent = hit ? hit[2] : "";
+      box.querySelector(".tag").hidden = !k.eigen;
+      box.querySelector('[data-act="reset"]').hidden = !k.eigen;
+      const rg = box.querySelector('input[type=range]'), nu = box.querySelector('input.num');
+      if (rg !== act && !this._busy?.[k.nr]) rg.value = cur;
+      if (nu !== act && !this._busy?.[k.nr]) nu.value = cur;
+    }
   }
 }
 

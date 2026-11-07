@@ -266,6 +266,20 @@ def test_fixture_profiles_match_presets():
     assert fx.channel_info("fe1500", p.parse_layout("D,R"))[0]["name"] == "Dimmer"  # passt nicht -> Standardnamen
 
 
+
+def test_twenty_patterns_stay_in_range():
+    from fdmx import patterns as pt
+    assert len(pt.PATTERNS) == 20
+    for name in pt.PATTERNS:
+        for mode in pt.MODES:
+            for k in range(200):
+                for i in range(2):
+                    u, v = pt.point(name, k / 200, i, 2, mode)
+                    assert -1 <= u <= 1 and -1 <= v <= 1, (name, mode)
+    x, y = pt.to_room(1, -1, (0.3, 3.2, 0.3, 9.7), 1.0)
+    assert (round(x, 6), round(y, 6)) == (3.2, 0.3)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

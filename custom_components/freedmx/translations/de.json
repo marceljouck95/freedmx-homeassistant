@@ -118,7 +118,9 @@
           "pan_invert": "Pan umkehren",
           "tilt_invert": "Tilt umkehren",
           "pan_offset": "Pan-Versatz",
-          "tilt_offset": "Tilt-Versatz"
+          "tilt_offset": "Tilt-Versatz",
+          "home_pan": "Grundstellung Pan (bei Aus)",
+          "home_tilt": "Grundstellung Tilt (bei Aus)"
         }
       }
     },
@@ -314,6 +316,22 @@
     "binary_sensor": {
       "connection": {
         "name": "Verbindung"
+      }
+    },
+    "select": {
+      "muster": {
+        "name": "Bewegungsmuster"
+      },
+      "modus": {
+        "name": "Muster-Modus"
+      }
+    },
+    "number": {
+      "tempo": {
+        "name": "Muster-Tempo"
+      },
+      "groesse": {
+        "name": "Muster-Größe"
       }
     }
   }

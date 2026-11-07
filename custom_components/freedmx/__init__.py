@@ -73,7 +73,7 @@ from .scenes import (
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.BINARY_SENSOR, Platform.LIGHT]
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.LIGHT, Platform.NUMBER, Platform.SELECT]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 SET_CHANNELS_SCHEMA = vol.Schema(
@@ -394,6 +394,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         configuration_url=f"http://{host}",
     )
 
+    from .runner import PatternRunner
+
+    hass.data.setdefault(DOMAIN, {}).setdefault("runners", {})[entry.entry_id] = PatternRunner(
+        hass, device, conf.get(CONF_LAMPS, []), room_data
+    )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
@@ -411,6 +416,9 @@ def _skip_when_free(device: FreeDmxDevice, lamp_id: str, guard):
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        runner = hass.data.get(DOMAIN, {}).get("runners", {}).pop(entry.entry_id, None)
+        if runner:
+            runner.stop()
         await entry.runtime_data.async_stop()
     return unloaded
 

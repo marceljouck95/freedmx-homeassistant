@@ -231,12 +231,23 @@ class FreeDmxLight(LightEntity, RestoreEntity):
         if not self._attr_brightness:
             self._attr_brightness = 255
         self._attr_is_on = True
+        self._sender.free_lamps.discard(self._lamp[LAMP_ID])
         self._apply(kwargs.get(ATTR_TRANSITION))
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         self._attr_is_on = False
         self._apply(kwargs.get(ATTR_TRANSITION))
+        if self._has_pos:
+            # Grundstellung anfahren (ohne Raum-Begrenzung, Licht ist ja aus)
+            from .protocol import percent_to_16bit
+
+            m = {**MOUNT_DEFAULTS, **self._lamp.get(LAMP_MOUNT, {})}
+            self._sender.free_lamps.add(self._lamp[LAMP_ID])
+            for channel, value in position_writes(
+                self._lamp, percent_to_16bit(m["home_pan"]), percent_to_16bit(m["home_tilt"])
+            ):
+                self._sender.set_channels(channel, [value])
         self.async_write_ha_state()
 
     def _cancel_fade(self) -> None:

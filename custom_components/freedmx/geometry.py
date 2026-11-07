@@ -35,6 +35,8 @@ MOUNT_PAN_INVERT = "pan_invert"
 MOUNT_TILT_INVERT = "tilt_invert"
 MOUNT_PAN_OFFSET = "pan_offset"
 MOUNT_TILT_OFFSET = "tilt_offset"
+MOUNT_HOME_PAN = "home_pan"
+MOUNT_HOME_TILT = "home_tilt"
 
 ROOM_DEFAULTS: dict[str, Any] = {
     ROOM_WIDTH: 3.5,
@@ -52,6 +54,8 @@ MOUNT_DEFAULTS: dict[str, Any] = {
     MOUNT_TILT_INVERT: False,
     MOUNT_PAN_OFFSET: 0.0,
     MOUNT_TILT_OFFSET: 0.0,
+    MOUNT_HOME_PAN: 50.0,
+    MOUNT_HOME_TILT: 50.0,
 }
 
 
