@@ -178,6 +178,10 @@
         "config_entry_id": {
           "name": "freeDMX device",
           "description": "Only needed if several are set up."
+        },
+        "lamp_ids": {
+          "name": "Lamps",
+          "description": "Store only these lamps (lamp_id). Empty = all."
         }
       }
     },
@@ -332,6 +336,11 @@
       },
       "groesse": {
         "name": "Pattern size"
+      }
+    },
+    "switch": {
+      "verbindung": {
+        "name": "Link"
       }
     }
   }

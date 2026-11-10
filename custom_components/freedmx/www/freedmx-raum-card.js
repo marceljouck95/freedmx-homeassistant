@@ -16,7 +16,7 @@
  * /local/freedmx-raum-card.js (JavaScript-Modul) eintragen.
  */
 
-const FR_VERSION = "1.4.0";
+const FR_VERSION = "1.5.0";
 const frEd = (sr, k) => { try { if (window.EinheitDesign) window.EinheitDesign.adopt(sr, k); else (window.__edQ = window.__edQ || []).push([sr, k]); } catch (e) { /* Design-Zentrale optional */ } };
 
 const FR_DEFAULTS = {
@@ -29,6 +29,68 @@ const FR_DEFAULTS = {
   show_controls: true,
   move_together: false,
 };
+
+
+/* ---------- gemeinsam: Verbindungs-Schalter und Speicherplätze ---------- */
+const fdLink = (hass) => {
+  const id = Object.keys(hass?.states || {}).find((k) => k.startsWith("switch.") && hass.states[k].attributes?.freedmx_verbindung);
+  return id ? { id, st: hass.states[id], on: hass.states[id].state === "on", ok: !!hass.states[id].attributes.erreichbar } : null;
+};
+const fdLinkText = (l) => !l ? "" : !l.on ? "Getrennt" : l.ok ? "Verbunden" : "Verbinde … (freeDMX antwortet nicht)";
+const fdSetLink = (hass, on) => { const l = fdLink(hass); if (l && l.on !== on) hass.callService("switch", on ? "turn_on" : "turn_off", { entity_id: l.id }); };
+/* Zählt Karten, die „beim Verlassen trennen“ nutzen: getrennt wird erst, wenn keine mehr offen ist. */
+const fdAuto = { open: 0, timer: null };
+const fdAutoEnter = (card) => {
+  const c = card._config || {};
+  if (c.auto_disconnect) { fdAuto.open++; card.__fdCounted = true; clearTimeout(fdAuto.timer); }
+  if (c.auto_connect && card._hass) fdSetLink(card._hass, true); else if (c.auto_connect) card.__fdPending = true;
+};
+const fdAutoLeave = (card) => {
+  if (!card.__fdCounted) return;
+  card.__fdCounted = false; fdAuto.open = Math.max(0, fdAuto.open - 1);
+  const hass = card._hass;
+  clearTimeout(fdAuto.timer);
+  // kurz warten: beim Wechsel in den Bearbeitungsmodus wird die Karte nur neu aufgebaut
+  fdAuto.timer = setTimeout(() => { if (!fdAuto.open && hass) fdSetLink(hass, false); }, 4000);
+};
+const FD_MEM_CSS = `
+  .mem { display:flex; flex-wrap:wrap; gap:6px; align-items:center; flex:none; }
+  .mem .lbl { font-size:.75rem; color:var(--secondary-text-color); margin-right:2px; }
+  .mem .m { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--ed-line,rgba(255,255,255,.12)); background:var(--ed-tile,rgba(255,255,255,.045)); color:inherit; border-radius:999px; padding:6px 12px; font:inherit; font-size:.85rem; cursor:pointer; }
+  .mem .m.del { border-color:#ff6b6b; }
+  .mem input.nm { flex:1 1 120px; min-width:90px; background:var(--ed-tile,rgba(255,255,255,.06)); color:inherit; border:1px solid var(--ed-line,rgba(255,255,255,.12)); border-radius:999px; padding:6px 12px; font:inherit; font-size:.85rem; }
+  .lk { display:inline-flex; align-items:center; gap:6px; }
+  .lk i { width:9px; height:9px; border-radius:50%; background:#888; display:inline-block; }
+  .lk.on i { background:#4cd790; } .lk.wait i { background:#ffc83d; }
+`;
+/* Speicherplätze zeichnen. lampIds = Lampen, für die gespeichert/abgerufen wird (leer = alle). */
+function fdMemHtml(card, lampIds) {
+  const l = fdLink(card._hass); if (!l) return "";
+  const all = l.st.attributes.speicher || [];
+  const list = lampIds.length ? all.filter((s) => lampIds.every((id) => s.lampen.includes(id)) && s.lampen.length === lampIds.length) : all;
+  const m = card._mem || (card._mem = { edit: false, add: false });
+  let h = `<span class="lbl">Speicher</span>`;
+  h += list.map((s) => `<button class="m ${m.edit ? "del" : ""}" data-mem="${m.edit ? "del" : "recall"}" data-id="${frEsc(s.id)}">${frEsc(s.name)}${m.edit ? " ✕" : ""}</button>`).join("");
+  if (m.add) h += `<input class="nm" maxlength="30" placeholder="Name, z. B. Bühne blau"><button class="m" data-mem="ok">Sichern</button><button class="m" data-mem="cancel">Abbrechen</button>`;
+  else h += `<button class="m" data-mem="add">＋ Speichern</button>${list.length ? `<button class="m" data-mem="edit">${m.edit ? "Fertig" : "Löschen …"}</button>` : ""}`;
+  return h;
+}
+function fdMemClick(card, ev, lampIds, redraw) {
+  const b = ev.target.closest("[data-mem]"); if (!b) return false;
+  const m = card._mem || (card._mem = { edit: false, add: false }), hass = card._hass, a = b.dataset.mem;
+  const fail = (e) => { card._memErr = `Fehler: ${e.message || e}`; redraw(); };
+  if (a === "add") { m.add = true; m.edit = false; redraw(); setTimeout(() => card.shadowRoot.querySelector(".mem input.nm")?.focus(), 30); }
+  else if (a === "cancel") { m.add = false; redraw(); }
+  else if (a === "edit") { m.edit = !m.edit; redraw(); }
+  else if (a === "ok") {
+    const name = (card.shadowRoot.querySelector(".mem input.nm")?.value || "").trim(); if (!name) return true;
+    const data = { name }; if (lampIds.length) data.lamp_ids = lampIds;
+    m.add = false; hass.callService("freedmx", "save_scene", data).catch(fail); redraw();
+  }
+  else if (a === "recall") hass.callService("freedmx", "recall_scene", { scene_id: b.dataset.id }).catch(fail);
+  else if (a === "del") hass.callService("freedmx", "delete_scene", { scene_id: b.dataset.id }).catch(fail);
+  return true;
+}
 
 const FR_COLORS = ["#3fc1ff", "#ffc83d", "#4cd790", "#ff7ad9", "#b48cff", "#ff8a4c"];
 
@@ -261,7 +323,7 @@ class FreedmxRaumCard extends HTMLElement {
     if (!this._hass || !this._config || !this.$) return;
     const c = this._config;
     const heads = this._heads();
-    const sig = JSON.stringify([heads.map((x) => [x.id, x.on, x.bri, x.target, x.mount, x.room, x.set, x.available]), c]);
+    const sig = JSON.stringify([fdLink(this._hass)?.st.state, fdLink(this._hass)?.ok, heads.map((x) => [x.id, x.on, x.bri, x.target, x.mount, x.room, x.set, x.available]), c]);
     if (!force && sig === this._sig) return;
     this._sig = sig;
 
@@ -270,6 +332,8 @@ class FreedmxRaumCard extends HTMLElement {
       this.$.dim.textContent = "";
       this.$.chips.innerHTML = "";
       this.$.svg.innerHTML = "";
+      const lk = fdLink(this._hass);
+      if (lk && !(lk.on && lk.ok)) { this.$.info.innerHTML = `<div class="empty">${fdLinkText(lk)}. ${lk.on ? "" : "Zum Steuern zuerst verbinden."}</div>`; this.$.ctl.innerHTML = ""; this._ctlKey = null; this.$.warn.textContent = ""; return; }
       this.$.info.innerHTML = `<div class="empty">Keine Moving Heads mit Montagedaten gefunden. Lampe mit Pan/Tilt in der freeDMX-Integration anlegen (Konfigurieren → Lampe bearbeiten).</div>`;
       this.$.ctl.innerHTML = ""; this._ctlKey = null; this.$.warn.textContent = "";
       return;
@@ -425,8 +489,12 @@ if (!customElements.get("freedmx-raum-card")) {
 /* =====================================================================
  * freeDMX Kanäle – alle DMX-Kanäle einer Lampe einstellen
  * type: custom:freedmx-kanaele-card, entity: light.xyz
+ * - jeder Wert 0–255 einzeln wählbar (Funktion + Wert, Zahl, −/+, Regler)
+ * - Gruppe: Einstellungen gelten für mehrere gleiche Lampen zugleich
+ * - Speicher: Position, Farbe und alle Kanäle sichern und abrufen
  * ===================================================================== */
-const FK_DEFAULTS = { entity: "", title: "", show_power: true, show_ranges: true, show_controlled: true };
+const FK_DEFAULTS = { entity: "", title: "", show_power: true, show_ranges: true, show_controlled: true,
+  show_connect: true, show_group: true, group_entities: [], group_default: false, show_memory: true };
 
 class FreedmxKanaeleCard extends HTMLElement {
   static getConfigElement() { return document.createElement("freedmx-kanaele-card-editor"); }
@@ -437,6 +505,11 @@ class FreedmxKanaeleCard extends HTMLElement {
   setConfig(config) {
     this.__rawCfg = config;
     this._config = { ...FK_DEFAULTS, ...(config || {}) };
+    if (!Array.isArray(this._config.group_entities)) this._config.group_entities = [];
+    if (this._group === undefined) {
+      this._group = !!this._config.group_default;
+      try { const v = localStorage.getItem("freedmx-gruppe:" + this._config.entity); if (v !== null) this._group = v === "1"; } catch (e) { /* ohne Speicher */ }
+    }
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
       frEd(this.shadowRoot, "freedmx");
@@ -446,9 +519,10 @@ class FreedmxKanaeleCard extends HTMLElement {
           --ha-card-background:var(--ed-bg,linear-gradient(160deg,#0f1d2e,#0a1420));--ha-card-border-radius:var(--ed-radius,22px);
           --primary-color:var(--ed-cool,#3fc1ff); color:var(--ed-text,#e8eef6); }
         ha-card { height:100%; box-sizing:border-box; padding:14px; display:flex; flex-direction:column; gap:10px; overflow:hidden; backdrop-filter:var(--ed-blur,none);-webkit-backdrop-filter:var(--ed-blur,none); }
-        .head { display:flex; align-items:center; justify-content:space-between; gap:10px; flex:none; }
+        .head { display:flex; align-items:center; justify-content:space-between; gap:10px; flex:none; flex-wrap:wrap; }
         .title { font-size:1.05rem; font-weight:600; }
         .sub { font-size:.8rem; color:var(--secondary-text-color); }
+        .pw { display:flex; gap:6px; flex-wrap:wrap; }
         .list { flex:1 1 auto; min-height:0; overflow:auto; display:flex; flex-direction:column; gap:8px; padding-right:4px; }
         .ch { background:var(--ed-tile,rgba(255,255,255,.045)); border:1px solid var(--ed-line,rgba(255,255,255,.08)); border-radius:var(--ed-r-tile,14px); padding:10px 12px; display:flex; flex-direction:column; gap:6px; }
         .ch.ctrl { opacity:.6; }
@@ -459,28 +533,38 @@ class FreedmxKanaeleCard extends HTMLElement {
         .tag { font-size:.72rem; border-radius:999px; padding:2px 8px; background:color-mix(in srgb, var(--ed-sun,#ffc83d) 22%, transparent); }
         input[type=range] { flex:1 1 140px; accent-color:var(--primary-color); }
         select { flex:1 1 180px; background:var(--ed-tile,rgba(255,255,255,.06)); color:inherit; border:1px solid var(--ed-line,rgba(255,255,255,.12)); border-radius:10px; padding:6px 8px; font:inherit; font-size:.85rem; }
+        select.vsel { flex:0 1 110px; }
         select option { color:#000; }
         .btn { border:1px solid var(--ed-line,rgba(255,255,255,.12)); background:var(--ed-tile,rgba(255,255,255,.045)); color:inherit; border-radius:var(--ed-r-tile,12px); padding:7px 12px; font:inherit; font-size:.85rem; cursor:pointer; }
         .btn.on { background:color-mix(in srgb, var(--ed-sun,#ffc83d) 28%, transparent); }
         .btn.small { padding:4px 8px; font-size:.75rem; }
         .empty { color:var(--secondary-text-color); }
+        .err { font-size:.8rem; color:#ff8a8a; flex:none; }
         .list { -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
         input.num { width:64px; background:var(--ed-tile,rgba(255,255,255,.06)); color:inherit; border:1px solid var(--ed-line,rgba(255,255,255,.12)); border-radius:8px; padding:5px 6px; font:inherit; text-align:center; }
-      </style><ha-card><div class="head"><div><div class="title"></div><div class="sub"></div></div><div class="pw"></div></div><div class="list"></div></ha-card>`;
+        ${FD_MEM_CSS}
+      </style><ha-card><div class="head"><div><div class="title"></div><div class="sub"></div></div><div class="pw"></div></div><div class="mem" hidden></div><div class="err" hidden></div><div class="list"></div></ha-card>`;
       const sr = this.shadowRoot;
-      this.$ = { title: sr.querySelector(".title"), sub: sr.querySelector(".sub"), pw: sr.querySelector(".pw"), list: sr.querySelector(".list") };
+      this.$ = { title: sr.querySelector(".title"), sub: sr.querySelector(".sub"), pw: sr.querySelector(".pw"), list: sr.querySelector(".list"), mem: sr.querySelector(".mem"), err: sr.querySelector(".err") };
       this._timers = {};
       sr.addEventListener("click", (ev) => {
+        if (fdMemClick(this, ev, this._lampIds(), () => { this._memKey = null; this._render(); })) return;
         const b = ev.target.closest("button"); if (!b) return;
         if (b.dataset.act === "power") {
           const st = this._hass.states[this._config.entity];
-          this._hass.callService("light", st?.state === "on" ? "turn_off" : "turn_on", { entity_id: this._config.entity });
+          this._hass.callService("light", st?.state === "on" ? "turn_off" : "turn_on", { entity_id: this._members() });
+        } else if (b.dataset.act === "link") {
+          const l = fdLink(this._hass); if (l) fdSetLink(this._hass, !l.on);
+        } else if (b.dataset.act === "group") {
+          this._group = !this._group; this._pwKey = null; this._memKey = null;
+          try { localStorage.setItem("freedmx-gruppe:" + this._config.entity, this._group ? "1" : "0"); } catch (e) { /* ohne Speicher */ }
+          this._render();
         } else if (b.dataset.act === "reset") this._send(Number(b.dataset.nr), null);
         else if (b.dataset.act === "inc" || b.dataset.act === "dec") {
           const nr = Number(b.dataset.nr), box = b.closest(".ch");
           const nu = box.querySelector("input.num"), rg = box.querySelector("input[type=range]");
           const v = Math.max(0, Math.min(255, Number(nu.value || 0) + (b.dataset.act === "inc" ? 1 : -1)));
-          nu.value = v; rg.value = v; this._queue(nr, v);
+          nu.value = v; rg.value = v; this._showValue(box, v); this._queue(nr, v);
         }
       });
       sr.addEventListener("input", (ev) => {
@@ -488,20 +572,37 @@ class FreedmxKanaeleCard extends HTMLElement {
         const nr = Number(el.dataset.nr), box = el.closest(".ch");
         const v = Math.max(0, Math.min(255, Math.round(Number(el.value) || 0)));
         if (el.type === "range") box.querySelector("input.num").value = v; else box.querySelector("input[type=range]").value = v;
+        this._showValue(box, v);
         this._queue(nr, v);
       });
+      sr.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && ev.target.classList?.contains("nm")) sr.querySelector('[data-mem="ok"]')?.click(); });
       sr.addEventListener("change", (ev) => {
         const el = ev.target;
-        if (el.tagName === "SELECT" && el.value !== "") { this._queue(Number(el.dataset.nr), Number(el.value)); el.value = ""; }
+        if (el.tagName === "SELECT" && el.value !== "") {
+          const box = el.closest(".ch"), v = Number(el.value);
+          box.querySelector("input.num").value = v; box.querySelector("input[type=range]").value = v;
+          this._showValue(box, v);
+          this._queue(Number(el.dataset.nr), v);
+        }
         if (el.type === "range") el.blur();
       });
     }
-    this._skey = null; this._pwKey = null;
+    this._skey = null; this._pwKey = null; this._memKey = null;
     if (this._hass) this._render();
   }
   set hass(h) { this._hass = h; this._render(); }
   getCardSize() { return 8; }
   getGridOptions() { return { columns: 12, min_columns: 3, rows: 8, min_rows: 3 }; }
+
+  /* Lampen, die zur Gruppe gehören könnten: gewählte, sonst alle mit gleicher Kanalbelegung */
+  _candidates() {
+    const c = this._config, st = this._hass.states[c.entity];
+    if (c.group_entities.length) return [...new Set([c.entity, ...c.group_entities])].filter((e) => this._hass.states[e]);
+    const lay = st?.attributes?.dmx_layout; if (!lay) return [c.entity];
+    return [c.entity, ...Object.keys(this._hass.states).filter((k) => k !== c.entity && k.startsWith("light.") && this._hass.states[k].attributes?.dmx_layout === lay && this._hass.states[k].attributes?.lamp_id)];
+  }
+  _members() { return this._group && this._config.show_group ? this._candidates() : [this._config.entity]; }
+  _lampIds() { return this._members().map((e) => this._hass.states[e]?.attributes?.lamp_id).filter(Boolean); }
 
   _queue(nr, v) {
     this._busy = this._busy || {};
@@ -511,36 +612,80 @@ class FreedmxKanaeleCard extends HTMLElement {
   }
 
   _send(nr, value) {
-    const st = this._hass.states[this._config.entity]; if (!st) return;
-    const data = { lamp_id: st.attributes.lamp_id, kanal: nr };
-    if (value !== null && value !== undefined) data.wert = value;
-    this._hass.callService("freedmx", "set_lamp_channel", data).catch((e) => { this.$.sub.textContent = `Fehler: ${e.message || e}`; });
+    for (const lamp_id of this._lampIds()) {
+      const data = { lamp_id, kanal: nr };
+      if (value !== null && value !== undefined) data.wert = value;
+      this._hass.callService("freedmx", "set_lamp_channel", data).catch((e) => { this.$.sub.textContent = `Fehler: ${e.message || e}`; });
+    }
+  }
+
+  /* Funktion und Einzelwert-Auswahl eines Kanals auf den Wert v stellen */
+  _showValue(box, v) {
+    const k = this._chan?.[box.dataset.nr]; if (!k) return;
+    const idx = (k.bereiche || []).findIndex((r) => v >= r[0] && v <= r[1]);
+    const hit = idx >= 0 ? k.bereiche[idx] : null;
+    box.querySelector(".fn").textContent = hit ? `${hit[2]} · ${v}` : `Wert ${v}`;
+    const fs = box.querySelector("select.fsel"), vs = box.querySelector("select.vsel");
+    if (!fs) return;
+    const act = this.shadowRoot.activeElement;
+    if (fs !== act) fs.value = hit ? String(hit[0]) : "";
+    const key = hit ? `${hit[0]}-${hit[1]}` : "x";
+    if (vs.dataset.range !== key) {
+      vs.dataset.range = key;
+      let o = "";
+      if (hit) for (let n = hit[0]; n <= hit[1]; n++) o += `<option value="${n}">${n}</option>`;
+      else o = `<option value="">–</option>`;
+      vs.innerHTML = o; vs.disabled = !hit || hit[0] === hit[1];
+    }
+    if (vs !== act && hit) vs.value = String(v);
   }
 
   _render() {
     if (!this._hass || !this._config || !this.$) return;
+    if (this.__fdPending) { this.__fdPending = false; fdSetLink(this._hass, true); }
     const c = this._config, st = this._hass.states[c.entity];
+    const link = fdLink(this._hass);
+    const linkBtn = (c.show_connect && link) ? `<button class="btn lk ${link.on ? (link.ok ? "on" : "wait") : ""}" data-act="link" title="${fdLinkText(link)}"><i></i>${link.on ? "Trennen" : "Verbinden"}</button>` : "";
+    this.$.err.hidden = !this._memErr; this.$.err.textContent = this._memErr || "";
     if (!st || !st.attributes?.kanaele) {
-      this._skey = null;
-      this.$.title.textContent = c.title || "DMX-Kanäle";
-      this.$.sub.textContent = ""; this.$.pw.innerHTML = "";
-      this.$.list.innerHTML = `<div class="empty">Bitte im Karten-Editor eine freeDMX-Lampe wählen.</div>`;
+      this._skey = null; this._pwKey = null; this._memKey = null;
+      this.$.title.textContent = c.title || st?.attributes?.friendly_name || "DMX-Kanäle";
+      this.$.mem.hidden = true;
+      const off = st && link && !(link.on && link.ok);
+      this.$.sub.textContent = off ? fdLinkText(link) : "";
+      this.$.pw.innerHTML = off ? linkBtn : "";
+      this.$.list.innerHTML = off
+        ? `<div class="empty">${link.on ? "Das freeDMX antwortet nicht. Ist es eingeschaltet und im WLAN?" : "Home Assistant ist vom freeDMX getrennt. Zum Steuern auf „Verbinden“ tippen."}</div>`
+        : `<div class="empty">Bitte im Karten-Editor eine freeDMX-Lampe wählen.</div>`;
       return;
     }
     const a = st.attributes;
+    const cand = c.show_group ? this._candidates() : [c.entity];
+    const grp = this._group && cand.length > 1;
     this.$.title.textContent = c.title || a.friendly_name || c.entity;
-    this.$.sub.textContent = `DMX ${a.dmx_kanaele} · ${st.state === "on" ? "an" : st.state === "off" ? "aus" : "nicht verfügbar"}`;
-    const pwKey = st.state;
+    this.$.sub.textContent = `DMX ${a.dmx_kanaele} · ${st.state === "on" ? "an" : st.state === "off" ? "aus" : "nicht verfügbar"}${grp ? ` · Gruppe: ${cand.length} Lampen` : ""}`;
+    const pwKey = JSON.stringify([st.state, link?.on, link?.ok, grp, cand.length, c.show_power, c.show_connect, c.show_group]);
     if (this._pwKey !== pwKey) {
       this._pwKey = pwKey;
-      this.$.pw.innerHTML = c.show_power ? `<button class="btn ${st.state === "on" ? "on" : ""}" data-act="power">${st.state === "on" ? "Ausschalten" : "Einschalten"}</button>` : "";
+      const names = cand.map((e) => this._hass.states[e]?.attributes?.friendly_name || e).join(", ");
+      this.$.pw.innerHTML = linkBtn
+        + (cand.length > 1 ? `<button class="btn ${grp ? "on" : ""}" data-act="group" title="${frEsc(names)}">Gruppe ${grp ? "an" : "aus"}</button>` : "")
+        + (c.show_power ? `<button class="btn ${st.state === "on" ? "on" : ""}" data-act="power">${st.state === "on" ? "Ausschalten" : "Einschalten"}</button>` : "");
+    }
+    // Speicherplätze
+    this.$.mem.hidden = !(c.show_memory && link);
+    if (c.show_memory && link) {
+      const ids = this._lampIds();
+      const memKey = JSON.stringify([link.st.attributes.speicher, ids, this._mem]);
+      if (this._memKey !== memKey) { this._memKey = memKey; this.$.mem.innerHTML = fdMemHtml(this, ids); }
     }
     const start = Number(String(a.dmx_kanaele).split("-")[0]);
     const list = a.kanaele.filter((k) => k.frei || c.show_controlled);
+    this._chan = Object.fromEntries(list.map((k) => [k.nr, k]));
     const skey = JSON.stringify([c.entity, c.show_ranges, c.show_controlled, list.map((k) => [k.nr, k.name, k.frei, k.bereiche?.length])]);
     if (this._skey !== skey) {
       // Aufbau nur bei neuer Lampe/Einstellung – danach werden nur Werte aktualisiert (flüssiges Scrollen)
-      this._skey = skey;
+      this._skey = skey; this._busy = {};
       this.$.list.innerHTML = list.map((k) => {
         const addr = start + k.nr - 1;
         if (!k.frei) {
@@ -548,9 +693,10 @@ class FreedmxKanaeleCard extends HTMLElement {
           return `<div class="ch ctrl" data-nr="${k.nr}"><div class="row"><span class="nr">K${k.nr} · ${addr}</span><span class="nm">${frEsc(k.name)}</span><span class="sub">${how}</span><span class="val"></span></div></div>`;
         }
         const ranges = (c.show_ranges && k.bereiche?.length > 1) ? k.bereiche : [];
-        const sel = ranges.length ? `<select data-nr="${k.nr}"><option value="">Funktion wählen …</option>${ranges.map((r) => `<option value="${r[0]}">${frEsc(r[2])} (${r[0]}–${r[1]})</option>`).join("")}</select>` : "";
+        // Funktion (aus der Anleitung) + jeder einzelne Wert innerhalb der Funktion
+        const sel = ranges.length ? `<select class="fsel" data-nr="${k.nr}" title="Funktion"><option value="">ohne Funktion</option>${ranges.map((r) => `<option value="${r[0]}">${frEsc(r[2])} (${r[0]}${r[1] > r[0] ? "–" + r[1] : ""})</option>`).join("")}</select><select class="vsel" data-nr="${k.nr}" title="Einzelwert in dieser Funktion"></select>` : "";
         return `<div class="ch" data-nr="${k.nr}"><div class="row"><span class="nr">K${k.nr} · ${addr}</span><span class="nm">${frEsc(k.name)}</span><span class="fn sub"></span><span class="tag" hidden>eigener Wert</span><button class="btn small" data-act="reset" data-nr="${k.nr}" hidden>Zurück</button></div>
-          <div class="row">${sel}</div>
+          ${sel ? `<div class="row">${sel}</div>` : ""}
           <div class="row"><button class="btn small" data-act="dec" data-nr="${k.nr}">−</button><input type="number" min="0" max="255" step="1" data-nr="${k.nr}" class="num"><button class="btn small" data-act="inc" data-nr="${k.nr}">+</button><input type="range" min="0" max="255" step="1" data-nr="${k.nr}"></div></div>`;
       }).join("");
     }
@@ -559,13 +705,13 @@ class FreedmxKanaeleCard extends HTMLElement {
       const box = this.$.list.querySelector(`.ch[data-nr="${k.nr}"]`); if (!box) continue;
       const cur = Number(k.wert);
       if (!k.frei) { box.querySelector(".val").textContent = cur; continue; }
-      const hit = (k.bereiche || []).find((r) => cur >= r[0] && cur <= r[1]);
-      box.querySelector(".fn").textContent = hit ? hit[2] : "";
       box.querySelector(".tag").hidden = !k.eigen;
       box.querySelector('[data-act="reset"]').hidden = !k.eigen;
+      if (this._busy?.[k.nr]) continue;
       const rg = box.querySelector('input[type=range]'), nu = box.querySelector('input.num');
-      if (rg !== act && !this._busy?.[k.nr]) rg.value = cur;
-      if (nu !== act && !this._busy?.[k.nr]) nu.value = cur;
+      if (rg !== act) rg.value = cur;
+      if (nu !== act) nu.value = cur;
+      this._showValue(box, cur);
     }
   }
 }
@@ -575,32 +721,117 @@ const FK_SCHEMA = [
   { name: "title", label: "Titel (leer = Name der Lampe)", selector: { text: {} } },
   { type: "grid", name: "", schema: [
     { name: "show_power", label: "Ein/Aus-Taste", selector: { boolean: {} } },
-    { name: "show_ranges", label: "Funktionsauswahl (aus der Anleitung)", selector: { boolean: {} } },
+    { name: "show_connect", label: "Taste Verbinden/Trennen", selector: { boolean: {} } },
+    { name: "show_ranges", label: "Funktions- und Wertauswahl (aus der Anleitung)", selector: { boolean: {} } },
     { name: "show_controlled", label: "Auch gesteuerte Kanäle zeigen (Dimmer, Pan/Tilt …)", selector: { boolean: {} } },
+    { name: "show_memory", label: "Speicherplätze (Position, Farbe, alle Kanäle)", selector: { boolean: {} } },
+    { name: "show_group", label: "Gruppen-Taste", selector: { boolean: {} } },
+    { name: "group_default", label: "Gruppe beim Öffnen an", selector: { boolean: {} } },
   ] },
+  { name: "group_entities", label: "Lampen der Gruppe (leer = alle gleichen Lampen automatisch)", selector: { entity: { domain: "light", multiple: true, integration: "freedmx" } } },
 ];
 
-class FreedmxKanaeleCardEditor extends HTMLElement {
-  setConfig(config) { this._config = { ...FK_DEFAULTS, ...(config || {}) }; this._render(); }
-  set hass(h) { this._hass = h; if (this._form) this._form.hass = h; else this._render(); }
-  _render() {
-    if (!this._hass || !this._config) return;
-    if (!this._form) {
-      this._form = document.createElement("ha-form");
-      this._form.computeLabel = (s) => s.label || s.name;
-      this._form.addEventListener("value-changed", (ev) => {
-        this._config = { ...this._config, ...ev.detail.value };
-        this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config }, bubbles: true, composed: true }));
-      });
-      this.appendChild(this._form);
+function fdEditor(schema, defaults) {
+  return class extends HTMLElement {
+    setConfig(config) { this._config = { ...defaults, ...(config || {}) }; this._render(); }
+    set hass(h) { this._hass = h; if (this._form) this._form.hass = h; else this._render(); }
+    _render() {
+      if (!this._hass || !this._config) return;
+      if (!this._form) {
+        this._form = document.createElement("ha-form");
+        this._form.computeLabel = (s) => s.label || s.name;
+        this._form.addEventListener("value-changed", (ev) => {
+          this._config = { ...this._config, ...ev.detail.value };
+          this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config }, bubbles: true, composed: true }));
+        });
+        this.appendChild(this._form);
+      }
+      this._form.hass = this._hass; this._form.schema = schema; this._form.data = this._config;
     }
-    this._form.hass = this._hass; this._form.schema = FK_SCHEMA; this._form.data = this._config;
+  };
+}
+
+/* =====================================================================
+ * freeDMX Verbindung – verbinden/trennen und Speicherplätze für alle Lampen
+ * type: custom:freedmx-verbindung-card
+ * ===================================================================== */
+const FV_DEFAULTS = { title: "freeDMX", auto_connect: false, auto_disconnect: false, show_memory: true };
+
+class FreedmxVerbindungCard extends HTMLElement {
+  static getConfigElement() { return document.createElement("freedmx-verbindung-card-editor"); }
+  static getStubConfig() { return { ...FV_DEFAULTS }; }
+  setConfig(config) {
+    this.__rawCfg = config;
+    this._config = { ...FV_DEFAULTS, ...(config || {}) };
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: "open" });
+      frEd(this.shadowRoot, "freedmx");
+      this.shadowRoot.innerHTML = `<style>
+        :host { display:block; height:100%;
+          --primary-text-color:var(--ed-text,#e8eef6);--secondary-text-color:var(--ed-sub,#8c9bb0);
+          --ha-card-background:var(--ed-bg,linear-gradient(160deg,#0f1d2e,#0a1420));--ha-card-border-radius:var(--ed-radius,22px);
+          color:var(--ed-text,#e8eef6); }
+        ha-card { height:100%; box-sizing:border-box; padding:14px; display:flex; flex-direction:column; gap:10px; overflow:auto; backdrop-filter:var(--ed-blur,none);-webkit-backdrop-filter:var(--ed-blur,none); }
+        .head { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+        .title { font-size:1.05rem; font-weight:600; }
+        .sub { font-size:.8rem; color:var(--secondary-text-color); }
+        .big { border:1px solid var(--ed-line,rgba(255,255,255,.12)); background:var(--ed-tile,rgba(255,255,255,.045)); color:inherit; border-radius:var(--ed-r-tile,14px); padding:12px 18px; font:inherit; font-weight:600; cursor:pointer; min-width:130px; justify-content:center; }
+        .big.on { background:color-mix(in srgb, #4cd790 26%, transparent); }
+        .big.wait { background:color-mix(in srgb, #ffc83d 26%, transparent); }
+        .err { font-size:.8rem; color:#ff8a8a; }
+        ${FD_MEM_CSS}
+      </style><ha-card><div class="head"><div><div class="title"></div><div class="sub"></div></div><button class="big lk" data-act="link"><i></i><span></span></button></div><div class="mem" hidden></div><div class="err" hidden></div></ha-card>`;
+      const sr = this.shadowRoot;
+      this.$ = { title: sr.querySelector(".title"), sub: sr.querySelector(".sub"), btn: sr.querySelector(".big"), txt: sr.querySelector(".big span"), mem: sr.querySelector(".mem"), err: sr.querySelector(".err") };
+      sr.addEventListener("click", (ev) => {
+        if (fdMemClick(this, ev, [], () => { this._memKey = null; this._render(); })) return;
+        if (ev.target.closest('[data-act="link"]')) { const l = fdLink(this._hass); if (l) fdSetLink(this._hass, !l.on); }
+      });
+      sr.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && ev.target.classList?.contains("nm")) sr.querySelector('[data-mem="ok"]')?.click(); });
+    }
+    this._memKey = null;
+    if (this.isConnected) { fdAutoLeave(this); clearTimeout(fdAuto.timer); fdAutoEnter(this); }
+    if (this._hass) this._render();
+  }
+  connectedCallback() { if (this._config) fdAutoEnter(this); }
+  disconnectedCallback() { fdAutoLeave(this); }
+  set hass(h) { this._hass = h; this._render(); }
+  getCardSize() { return 2; }
+  getGridOptions() { return { columns: 12, min_columns: 3, rows: 2, min_rows: 1 }; }
+  _render() {
+    if (!this._hass || !this._config || !this.$) return;
+    if (this.__fdPending) { this.__fdPending = false; fdSetLink(this._hass, true); }
+    const c = this._config, l = fdLink(this._hass);
+    this.$.title.textContent = c.title || "freeDMX";
+    this.$.err.hidden = !this._memErr; this.$.err.textContent = this._memErr || "";
+    if (!l) { this.$.sub.textContent = "freeDMX-Integration ab Version 0.8.0 nötig."; this.$.btn.hidden = true; this.$.mem.hidden = true; return; }
+    this.$.btn.hidden = false;
+    this.$.sub.textContent = fdLinkText(l) + (c.auto_connect || c.auto_disconnect ? ` · automatisch: ${[c.auto_connect ? "verbinden beim Öffnen" : "", c.auto_disconnect ? "trennen beim Verlassen" : ""].filter(Boolean).join(", ")}` : "");
+    this.$.btn.className = `big lk ${l.on ? (l.ok ? "on" : "wait") : ""}`;
+    this.$.txt.textContent = l.on ? "Trennen" : "Verbinden";
+    this.$.mem.hidden = !c.show_memory;
+    if (c.show_memory) {
+      const key = JSON.stringify([l.st.attributes.speicher, this._mem]);
+      if (this._memKey !== key) { this._memKey = key; this.$.mem.innerHTML = fdMemHtml(this, []); }
+    }
   }
 }
 
+const FV_SCHEMA = [
+  { name: "title", label: "Titel", selector: { text: {} } },
+  { type: "grid", name: "", schema: [
+    { name: "auto_connect", label: "Beim Öffnen der Seite verbinden", selector: { boolean: {} } },
+    { name: "auto_disconnect", label: "Beim Verlassen der Seite trennen", selector: { boolean: {} } },
+    { name: "show_memory", label: "Speicherplätze für alle Lampen", selector: { boolean: {} } },
+  ] },
+];
+
 if (!customElements.get("freedmx-kanaele-card")) {
   customElements.define("freedmx-kanaele-card", FreedmxKanaeleCard);
-  customElements.define("freedmx-kanaele-card-editor", FreedmxKanaeleCardEditor);
+  customElements.define("freedmx-kanaele-card-editor", fdEditor(FK_SCHEMA, FK_DEFAULTS));
+  customElements.define("freedmx-verbindung-card", FreedmxVerbindungCard);
+  customElements.define("freedmx-verbindung-card-editor", fdEditor(FV_SCHEMA, FV_DEFAULTS));
   window.customCards = window.customCards || [];
-  window.customCards.push({ type: "freedmx-kanaele-card", name: "freeDMX Kanäle", description: "Alle DMX-Kanäle einer Lampe mit Funktionsauswahl aus der Anleitung", preview: false });
+  window.customCards.push({ type: "freedmx-kanaele-card", name: "freeDMX Kanäle", description: "Alle DMX-Kanäle einer Lampe: jeder Wert einzeln, Gruppe, Speicherplätze", preview: false });
+  window.customCards.push({ type: "freedmx-verbindung-card", name: "freeDMX Verbindung", description: "Verbinden/Trennen (auch automatisch beim Öffnen/Verlassen) und Speicherplätze", preview: false });
 }

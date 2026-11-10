@@ -52,6 +52,7 @@ ATTR_NAME = "name"
 ATTR_SCENE_ID = "scene_id"
 ATTR_POSITION_ID = "position_id"
 ATTR_LAMP_ID = "lamp_id"
+ATTR_LAMP_IDS = "lamp_ids"
 
 POS_ID = "id"
 POS_NAME = "name"

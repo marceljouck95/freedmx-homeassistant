@@ -53,11 +53,34 @@ class FreeDmxDevice(asyncio.DatagramProtocol):
         self.guards: list[Callable[[bytearray, int, int], bool]] = []
         self._value_listeners: list[Callable[[int, int], None]] = []
         self.free_lamps: set[str] = set()  # Lampen, deren Begrenzung gerade ausgesetzt ist
+        self._enabled = True  # False = getrennt: es wird nichts gesendet (freeDMX frei für andere Apps)
 
     # ---------- Zustand ----------
     @property
     def connected(self) -> bool:
         return self._connected
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    def set_enabled(self, value: bool) -> None:
+        """Verbindung von Hand herstellen (True) oder trennen (False).
+
+        Getrennt sendet Home Assistant nichts mehr an das freeDMX; die Kanalwerte
+        bleiben gemerkt und werden beim Verbinden wieder gesendet.
+        """
+        value = bool(value)
+        if value == self._enabled:
+            return
+        self._enabled = value
+        if value:
+            self._last_handshake = -HANDSHAKE_INTERVAL
+            self._last_seen = 0.0
+        else:
+            if self._transport and self._addr:
+                self._transport.sendto(TERMINATE, self._addr)
+            self._set_connected(False)
 
     def add_listener(self, callback: Callable[[], None]) -> Callable[[], None]:
         self._listeners.append(callback)
@@ -141,6 +164,9 @@ class FreeDmxDevice(asyncio.DatagramProtocol):
     async def _run(self) -> None:
         loop = self._hass.loop
         while True:
+            if not self._enabled:
+                await asyncio.sleep(0.2)
+                continue
             now = loop.time()
             if self._connected and now - self._last_seen > ACK_TIMEOUT:
                 self._set_connected(False)
@@ -161,7 +187,7 @@ class FreeDmxDevice(asyncio.DatagramProtocol):
 
     # ---------- Empfang (nur Lebenszeichen) ----------
     def datagram_received(self, data: bytes, addr) -> None:
-        if self._addr is None or addr[0] != self._addr[0]:
+        if self._addr is None or addr[0] != self._addr[0] or not self._enabled:
             return
         # Wie QLC+: jedes Paket vom freeDMX gilt als Lebenszeichen
         # (beobachtet: F0 64, A7, AA und A0).

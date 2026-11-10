@@ -26,6 +26,10 @@ save_scene:
       example: "Abend"
       selector:
         text:
+    lamp_ids:
+      required: false
+      selector:
+        object:
     config_entry_id:
       required: false
       selector:

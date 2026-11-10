@@ -133,6 +133,42 @@ def test_device_end_to_end():
     asyncio.run(run())
 
 
+def test_manual_disconnect_and_reconnect():
+    """Trennen: nichts wird mehr gesendet, Werte bleiben; Verbinden: sendet wieder."""
+    async def run():
+        port = 19101
+        log = []
+        server = await fake_freedmx(port, log)
+        dev = d.FreeDmxDevice(FakeHass(), "127.0.0.1", port, None)
+        await dev.async_start()
+        dev.set_channels(5, [77])
+        await asyncio.sleep(1.2)
+        assert dev.connected and dev.enabled
+        dev.set_enabled(False)
+        await asyncio.sleep(0.4)
+        assert not dev.connected and not dev.enabled
+        assert p.TERMINATE in log
+        n = len(log)
+        await asyncio.sleep(1.5)
+        sent = [x for x in log[n:] if x != b"<terminated>"]
+        assert sent == [], f"getrennt wurde noch gesendet: {len(sent)} Pakete"
+        assert dev.get_channels(5, 1) == [77]
+        dev.set_enabled(True)
+        await asyncio.sleep(1.5)
+        assert dev.connected
+        frames = [x for x in log[n:] if len(x) == 250]
+        assert frames and frames[0][12:15].hex(" ").upper() == "C0 04 4D"   # Kanal 5 = 77
+        await dev.async_stop()
+        server.close()
+    asyncio.run(run())
+
+
+def test_scene_with_state_only_selected_lamps():
+    scene = sc.make_scene("Blau links", {"a": [1, 2, 3]}, {"a": {"on": True, "bri": 200}, "b": {"on": False}})
+    assert scene["channels"] == {"a": [1, 2, 3]} and scene["state"] == {"a": {"on": True, "bri": 200}}
+    assert "state" not in sc.make_scene("x", {"a": [0]})
+
+
 def test_position_tokens_and_fine_bytes():
     L = p.parse_layout("P,T,0,0,0,0,0,0,0,0,D,0,p,t")
     assert L[0] == "P" and L[12] == "p" and L[13] == "t"

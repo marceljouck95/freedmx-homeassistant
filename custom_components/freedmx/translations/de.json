@@ -178,6 +178,10 @@
         "config_entry_id": {
           "name": "freeDMX-Gerät",
           "description": "Nur nötig, wenn mehrere eingerichtet sind."
+        },
+        "lamp_ids": {
+          "name": "Lampen",
+          "description": "Nur diese Lampen speichern (lamp_id). Leer = alle."
         }
       }
     },
@@ -332,6 +336,11 @@
       },
       "groesse": {
         "name": "Muster-Größe"
+      }
+    },
+    "switch": {
+      "verbindung": {
+        "name": "Verbindung"
       }
     }
   }

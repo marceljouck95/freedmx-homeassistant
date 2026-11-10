@@ -18,6 +18,7 @@ from .const import (
     ATTR_CHANNEL,
     ATTR_CONFIG_ENTRY_ID,
     ATTR_LAMP_ID,
+    ATTR_LAMP_IDS,
     ATTR_NAME,
     ATTR_POSITION_ID,
     ATTR_SCENE_ID,
@@ -73,7 +74,13 @@ from .scenes import (
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.BINARY_SENSOR, Platform.LIGHT, Platform.NUMBER, Platform.SELECT]
+PLATFORMS = [
+    Platform.BINARY_SENSOR,
+    Platform.LIGHT,
+    Platform.NUMBER,
+    Platform.SELECT,
+    Platform.SWITCH,
+]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 SET_CHANNELS_SCHEMA = vol.Schema(
@@ -93,6 +100,7 @@ SAVE_SCENE_SCHEMA = vol.Schema(
     {
         vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string,
         vol.Required(ATTR_NAME): cv.string,
+        vol.Optional(ATTR_LAMP_IDS): vol.All(cv.ensure_list, [cv.string]),
     }
 )
 SCENE_ID_SCHEMA = vol.Schema({vol.Required(ATTR_SCENE_ID): cv.string})
@@ -183,6 +191,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     async def save_scenes() -> None:
         await store.async_save({"scenes": hass.data[DOMAIN]["scenes"]})
+        for link in hass.data[DOMAIN].get("links", []):  # Karten lesen die Liste aus dem Schalter
+            link.async_write_ha_state()
 
     async def handle_set_channels(call: ServiceCall) -> None:
         entry = _target_entry(hass, call.data.get(ATTR_CONFIG_ENTRY_ID))
@@ -193,14 +203,31 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         entry.runtime_data.set_channels(channel, values)
 
     async def handle_save_scene(call: ServiceCall) -> None:
+        """Speicherplatz anlegen: alle Kanäle (Position, Farbe, Gobo …) der gewählten Lampen.
+
+        Ohne lamp_ids werden alle Lampen gespeichert. Gleicher Name + gleiche Lampen = überschreiben.
+        """
         entry = _target_entry(hass, call.data.get(ATTR_CONFIG_ENTRY_ID))
         lamps = merged_config(entry).get(CONF_LAMPS, [])
-        snapshots = {}
+        only = call.data.get(ATTR_LAMP_IDS)
+        lights = hass.data[DOMAIN].get("lights", {})
+        snapshots, states = {}, {}
         for lamp in lamps:
+            if only and lamp["id"] not in only:
+                continue
             start, length = lamp_span(lamp)
             snapshots[lamp["id"]] = entry.runtime_data.get_channels(start, length)
-        scene = make_scene(call.data[ATTR_NAME].strip() or "Szene", snapshots)
-        hass.data[DOMAIN]["scenes"].append(scene)
+            if (light := lights.get(lamp["id"])) is not None:
+                states[lamp["id"]] = light.snapshot()
+        if not snapshots:
+            raise ServiceValidationError("Keine passende Lampe gefunden.")
+        name = call.data[ATTR_NAME].strip() or "Speicher"
+        scene = make_scene(name, snapshots, states)
+        kept = [
+            s for s in hass.data[DOMAIN]["scenes"]
+            if not (s["name"] == name and set(s.get("channels", {})) == set(snapshots))
+        ]
+        hass.data[DOMAIN]["scenes"] = [*kept, scene]
         await save_scenes()
 
     async def handle_recall_scene(call: ServiceCall) -> None:
@@ -210,13 +237,20 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         )
         if scene is None:
             raise ServiceValidationError("Szene nicht gefunden.")
+        lights = hass.data[DOMAIN].get("lights", {})
+        states = scene.get("state", {})
         for entry in hass.config_entries.async_entries(DOMAIN):
             if entry.state is not ConfigEntryState.LOADED:
                 continue
             for lamp in merged_config(entry).get(CONF_LAMPS, []):
                 values = scene["channels"].get(lamp["id"])
                 start, length = lamp_span(lamp)
-                if values and len(values) == length:
+                if not values or len(values) != length:
+                    continue
+                light = lights.get(lamp["id"])
+                if light is not None:
+                    light.restore(values, states.get(lamp["id"]))
+                else:
                     entry.runtime_data.set_channels(start, values)
 
     async def handle_delete_scene(call: ServiceCall) -> None:

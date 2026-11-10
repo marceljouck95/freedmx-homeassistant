@@ -208,6 +208,40 @@ class FreeDmxLight(LightEntity, RestoreEntity):
                 values[idx] = val
         return values
 
+    def snapshot(self) -> dict[str, Any]:
+        """Zustand für einen Speicherplatz: an/aus, Helligkeit, Farbe, eigene Kanalwerte."""
+        return {
+            "on": bool(self._attr_is_on),
+            "bri": int(self._attr_brightness or 0),
+            "rgb": list(self._attr_rgb_color or ()),
+            "rgbw": list(self._attr_rgbw_color or ()),
+            "over": {str(i + 1): v for i, v in sorted(self._overrides.items())},
+        }
+
+    def restore(self, values: list[int], state: dict[str, Any] | None) -> None:
+        """Speicherplatz abrufen: Kanalwerte (inkl. Position) und Licht-Zustand setzen."""
+        self._cancel_fade()
+        if state:
+            self._attr_is_on = bool(state.get("on", True))
+            if state.get("bri"):
+                self._attr_brightness = int(state["bri"])
+            if len(state.get("rgb") or ()) == 3:
+                self._attr_rgb_color = tuple(int(v) for v in state["rgb"])
+            if len(state.get("rgbw") or ()) == 4:
+                self._attr_rgbw_color = tuple(int(v) for v in state["rgbw"])
+            self._overrides = {}
+            for key, val in (state.get("over") or {}).items():
+                idx = int(key) - 1
+                if idx in self._free_idx:
+                    self._overrides[idx] = max(0, min(255, int(val)))
+        self._sender.free_lamps.discard(self._lamp[LAMP_ID])
+        if len(values) == len(self._layout):
+            self._sender.set_channels(self._start, list(values))
+        if state:
+            # Dimmer/Farbe/feste Kanäle aus dem Zustand; die Position bleibt wie gespeichert
+            self._sender.set_channels(self._start, self._target())
+        self.async_write_ha_state()
+
     def set_override(self, channel: int, value: int | None) -> None:
         """Festen Kanal (1-basiert) dauerhaft einstellen; None = Grundeinstellung."""
         idx = channel - 1

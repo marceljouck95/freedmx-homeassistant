@@ -13,13 +13,24 @@ def new_id() -> str:
     return uuid.uuid4().hex
 
 
-def make_scene(name: str, snapshots: dict[str, list[int]]) -> dict[str, Any]:
-    """Szene aus den aktuellen Kanalwerten je Lampe bauen."""
-    return {
+def make_scene(
+    name: str,
+    snapshots: dict[str, list[int]],
+    states: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Szene (Speicherplatz) aus den aktuellen Kanalwerten je Lampe bauen.
+
+    states: optional je Lampe der Licht-Zustand (an, Helligkeit, Farbe, eigene Kanalwerte),
+    damit beim Abrufen auch die Anzeige in Home Assistant stimmt.
+    """
+    scene: dict[str, Any] = {
         "id": new_id(),
         "name": name,
         "channels": {lamp_id: list(values) for lamp_id, values in snapshots.items()},
     }
+    if states:
+        scene["state"] = {k: dict(v) for k, v in states.items() if k in snapshots}
+    return scene
 
 
 def lamp_span(lamp: dict[str, Any]) -> tuple[int, int]:

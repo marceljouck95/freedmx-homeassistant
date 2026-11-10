@@ -67,3 +67,10 @@ data:
 ## Tests
 `python3 tests/test_native.py` prüft die Kodierung gegen die Beispiele im Protokoll
 und den Sender gegen ein simuliertes freeDMX (ohne Home Assistant).
+
+## Neu in 0.8.0
+
+- **Verbinden / Trennen:** Schalter „Verbindung“. Getrennt sendet Home Assistant nichts mehr an das freeDMX (frei für andere Apps); die Werte bleiben gemerkt. Karte `custom:freedmx-verbindung-card` mit Taste, optional „beim Öffnen der Seite verbinden“ und „beim Verlassen trennen“. Die Kanäle-Karte hat dieselbe Taste.
+- **Jeder Wert einzeln:** In der Kanäle-Karte wählt man die Funktion und daneben jeden einzelnen Wert innerhalb der Funktion (zusätzlich Zahl, −/+ und Regler für 0–255).
+- **Gruppe:** Taste „Gruppe“ in der Kanäle-Karte – Einstellungen und Ein/Aus gelten für alle gleichen Lampen (oder die im Editor gewählten).
+- **Speicherplätze:** Position, Farbe und alle Kanäle unter einem Namen sichern, abrufen und löschen (für eine Lampe, die Gruppe oder alle Lampen). Dienst `freedmx.save_scene` mit optionalem `lamp_ids`.
