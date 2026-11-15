@@ -48,6 +48,7 @@ class FreeDmxConnection(BinarySensorEntity):
             "host": self._sender.host,
             "port": self._sender.port,
             "letzte_antwort": self._sender.last_reply,
+            **self._sender.stats,
         }
 
     async def async_added_to_hass(self) -> None:

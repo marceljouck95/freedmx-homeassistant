@@ -40,7 +40,7 @@ HANDSHAKE = b"\xE5\x39\x60\x00"
 TERMINATE = b"\xAC\x00"
 ACK_WORD = b"\xF0\x64"
 HANDSHAKE_REPLIES = (b"\xA7", b"\xAA")
-ACK_TIMEOUT = 5.0  # Sekunden ohne Lebenszeichen -> getrennt
+ACK_TIMEOUT = 12.0  # Sekunden ohne Lebenszeichen -> getrennt (WLAN-Aussetzer überbrücken)
 
 # Kanal-Wortcode je Kanalbereich (wie im Dokument)
 _CODE_0 = 0xC0  # Kanäle 0-127

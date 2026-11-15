@@ -52,6 +52,9 @@ class FreeDmxDevice(asyncio.DatagramProtocol):
         self._dirty = True
         self._last_send = -IDLE_REFRESH
         self.frames_sent = 0
+        # Diagnose: Handshakes/Antworten, Abbrüche, längste Funkstille
+        self.stats = {"handshakes": 0, "antworten": 0, "abbrueche": 0, "laengste_luecke_s": 0.0}
+        self._down_since: float | None = None
         self._transport: asyncio.DatagramTransport | None = None
         self._task: asyncio.Task | None = None
         self._connected = False
@@ -107,7 +110,14 @@ class FreeDmxDevice(asyncio.DatagramProtocol):
         if value == self._connected:
             return
         self._connected = value
-        _LOGGER.warning(
+        if value:
+            # Nach einem Aussetzer sofort den kompletten Puffer neu senden,
+            # damit die Lampen ohne Verzögerung den aktuellen Stand haben.
+            self._dirty = True
+            self._last_send = -IDLE_REFRESH
+        elif self._enabled:
+            self.stats["abbrueche"] += 1
+        _LOGGER.info(
             "freeDMX %s:%s %s",
             self.host,
             self.port,
@@ -192,6 +202,7 @@ class FreeDmxDevice(asyncio.DatagramProtocol):
                 and now - self._last_handshake >= HANDSHAKE_INTERVAL
             ):
                 self._last_handshake = now
+                self.stats["handshakes"] += 1
                 self._transport.sendto(HANDSHAKE, self._addr)
 
             # Senden nur bei Änderung (höchstens im eingestellten Takt)
@@ -212,6 +223,12 @@ class FreeDmxDevice(asyncio.DatagramProtocol):
         # Wie QLC+: jedes Paket vom freeDMX gilt als Lebenszeichen
         # (beobachtet: F0 64, A7, AA und A0).
         self.last_reply = data.hex()
+        now = self._hass.loop.time()
+        if self._last_seen:
+            gap = now - self._last_seen
+            if gap > self.stats["laengste_luecke_s"] and gap < 3600:
+                self.stats["laengste_luecke_s"] = round(gap, 1)
+        self.stats["antworten"] += 1
         if data != ACK_WORD and data not in HANDSHAKE_REPLIES:
             _LOGGER.debug("Paket von %s: %s", addr, data.hex())
         self._last_seen = self._hass.loop.time()
