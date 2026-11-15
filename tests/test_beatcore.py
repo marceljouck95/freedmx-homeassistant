@@ -169,3 +169,43 @@ def test_fe1500_und_abschnitte():
     assert bc.fe1500_effect(base, 1.0, None)[1] == 164         # ohne Farbwechsel: eigene Farbe
     assert bc.segment_seconds(180) == 60 and bc.segment_seconds(3600) == 90
     assert bc.segment_seconds(30) == 20 and bc.segment_seconds(None) == 60
+
+
+# ---------- Moving-Head-Tempo ----------
+def test_mh_speed_kennlinie_und_grenzen():
+    base = 50
+    # Mitte (128 BPM) = Standard-Geschwindigkeit
+    assert bc.mh_speed_value(128, base) == bc.mh_speed_value(128, base, auto=False)
+    assert bc.mh_speed_percent(128, base) == base
+    # langsamer Beat = langsame Bewegung (hoher Kanalwert), schneller Beat = schnelle (niedriger Kanalwert)
+    slow, mid, fast = (bc.mh_speed_value(b, base) for b in (70, 128, 175))
+    assert slow > mid > fast
+    # monoton über den ganzen Bereich, glatt (keine Sprünge > 12 je BPM)
+    vals = [bc.mh_speed_value(b, base) for b in range(40, 241)]
+    assert all(a >= b for a, b in zip(vals, vals[1:]))
+    assert max(abs(a - b) for a, b in zip(vals, vals[1:])) <= 12
+    # unter 70 und über 175 bleibt der Wert stehen
+    assert bc.mh_speed_value(40, base) == bc.mh_speed_value(70, base)
+    assert bc.mh_speed_value(240, base) == bc.mh_speed_value(175, base)
+
+
+def test_mh_speed_nie_ueber_225():
+    for base in range(1, 101):
+        for bpm in (None, 20, 40, 70, 100, 128, 175, 240, 480):
+            for auto in (True, False):
+                assert 0 <= bc.mh_speed_value(bpm, base, auto) <= 225
+    assert bc.mh_speed_value(None, 1, False) == 225   # 1 % = langsamste erlaubte Stufe
+    assert bc.mh_speed_value(None, 100, False) == 0   # 100 % = schnellste
+
+
+def test_mh_speed_automatik_aus_oder_ohne_tempo_gilt_standard():
+    for base in (1, 25, 50, 75, 100):
+        std = round((100 - base) / 99 * 225)
+        for bpm in (60, 128, 200):
+            assert bc.mh_speed_value(bpm, base, auto=False) == std
+        assert bc.mh_speed_value(None, base, auto=True) == std   # kein Tempo bekannt
+
+
+def test_mh_speed_standard_verschiebt_die_mitte():
+    assert bc.mh_speed_value(128, 20) > bc.mh_speed_value(128, 80)
+    assert bc.mh_speed_value(70, 80) > bc.mh_speed_value(128, 80) > bc.mh_speed_value(175, 80)

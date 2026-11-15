@@ -35,6 +35,8 @@ from .beatcore import (
     clean_title,
     effect_capable,
     effect_frame,
+    MH_SPEED_CHANNEL,
+    mh_speed_value,
     same_artist,
     track_key,
 )
@@ -68,6 +70,8 @@ DEFAULTS: dict[str, Any] = {
     "auto_every": 0,
     "live_bpm": True,     # Radio-Streams selbst mithören und das Tempo messen
     "live_interval": 5,   # Sekunden zwischen zwei Messungen (5 = normal, 10 = ruhig)      # Musterwechsel alle n Durchläufe (0 = nach Titellänge)
+    "mh_speed_auto": True,  # Moving-Head-Tempo (Pan/Tilt-Geschwindigkeit) folgt dem Beat
+    "mh_speed": 50,         # Standard-Geschwindigkeit 1-100 % (Mitte der Automatik, gilt bei Automatik aus)
 }
 
 
@@ -476,7 +480,9 @@ class BeatEngine:
                 v = min((0.5, 1.0, 2.0, 4.0), key=lambda r: abs(r - float(v)))
             if k == "live_interval":
                 v = 10 if int(v) >= 8 else 5
-            if k in ("auto_lights", "auto_pattern", "live_bpm"):
+            if k == "mh_speed":
+                v = max(1, min(100, int(v)))
+            if k in ("auto_lights", "auto_pattern", "live_bpm", "mh_speed_auto"):
                 v = bool(v)
             if k == "auto_every":
                 v = min((0, 1, 2, 4), key=lambda r: abs(r - int(v)))
@@ -558,6 +564,21 @@ class BeatEngine:
             return None
         return (self.beat_now() / self.settings["bars"]) % 1.0
 
+    def mh_speed_for(self, lamp: dict, light: Any = None) -> tuple[int, int] | None:
+        """(Kanalindex, DMX-Wert) der Pan/Tilt-Geschwindigkeit, die Beat-Sync setzen soll – sonst None.
+
+        None, wenn Beat-Sync aus ist, die Lampe keinen bekannten Geschwindigkeitskanal hat oder der
+        Nutzer sie gerade bedient bzw. den Kanal selbst eingestellt hat (Handbedienung hat Vorrang).
+        """
+        idx = MH_SPEED_CHANNEL.get(lamp.get("preset"))
+        if idx is None or not self.settings["enabled"]:
+            return None
+        if light is not None and (getattr(light, "manual_until", 0) > time.monotonic()
+                                  or idx in getattr(light, "_overrides", {})):
+            return None
+        bpm = self.clock.bpm if self.clock.ready else None
+        return idx, mh_speed_value(bpm, self.settings["mh_speed"], bool(self.settings["mh_speed_auto"]))
+
     def auto_active(self) -> bool:
         return bool(self.settings["enabled"] and self.settings["auto_pattern"] and self.clock.ready)
 
@@ -600,6 +621,8 @@ class BeatEngine:
                         color = cols[ci] if ci is not None else None
                         special = SPECIAL_EFFECT.get(lamp.get("preset"))
                         vals = special(base, level, color) if special else apply_effect(lay, base, level, color)
+                        if (sp := self.mh_speed_for(lamp, light)) is not None and sp[0] < len(vals):
+                            vals[sp[0]] = sp[1]
                         self._device.set_channels(int(lamp["start_address"]), vals)
                         self._touched.add(lamp["id"])
                 elif self._touched:
@@ -639,6 +662,8 @@ class BeatEngine:
             "auto_lights": self.settings["auto_lights"],
             "auto_pattern": self.settings["auto_pattern"],
             "auto_every": self.settings["auto_every"],
+            "mh_speed_auto": self.settings["mh_speed_auto"],
+            "mh_speed": self.settings["mh_speed"],
             "auto_wechsel_wahl": AUTO_EVERY,
             "live_bpm": self.settings["live_bpm"],
             "live_status": self._live.status,

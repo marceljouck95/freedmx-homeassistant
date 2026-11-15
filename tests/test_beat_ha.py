@@ -421,3 +421,26 @@ async def test_manual_pause_effekt_laesst_lampe_in_ruhe(hass: HomeAssistant, no_
         await asyncio.sleep(0.03)
     assert 0 in seen and 200 in seen, seen          # danach läuft der Effekt wieder
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_mh_speed_folgt_beat_nie_ueber_225(hass: HomeAssistant, no_network):
+    entry = await _setup(hass)
+    device = entry.runtime_data
+    engine = hass.data["freedmx"]["beats"][entry.entry_id]
+    lamp = LAMPS[2]
+    await hass.services.async_call("freedmx", "beat_settings", {"source": "manuell", "manual_bpm": 70, "enabled": True, "mh_speed": 50}, blocking=True)
+    light = hass.data["freedmx"]["lights"]["mh1"]
+    light.manual_until = 0
+    slow = engine.mh_speed_for(lamp, light)
+    await hass.services.async_call("freedmx", "beat_settings", {"manual_bpm": 175}, blocking=True)
+    fast = engine.mh_speed_for(lamp, light)
+    assert slow[0] == fast[0] == 2 and 0 <= fast[1] < slow[1] <= 225
+    await hass.services.async_call("freedmx", "beat_settings", {"mh_speed_auto": False, "mh_speed": 100}, blocking=True)
+    assert engine.mh_speed_for(lamp, light) == (2, 0)           # Automatik aus -> Standardwert
+    light.manual_until = time.monotonic() + 60
+    assert engine.mh_speed_for(lamp, light) is None             # Handbedienung hat Vorrang
+    light.manual_until = 0
+    light._overrides[2] = 99
+    assert engine.mh_speed_for(lamp, light) is None             # Kanal von Hand gesetzt
+    assert engine.mh_speed_for(LAMPS[0]) is None                # Lampe ohne Geschwindigkeitskanal
+    await hass.config_entries.async_unload(entry.entry_id)
