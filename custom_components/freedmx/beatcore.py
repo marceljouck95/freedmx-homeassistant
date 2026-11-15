@@ -40,6 +40,37 @@ PALETTE = [(int(c[1:3], 16), int(c[3:5], 16), int(c[5:7], 16)) for c in PALETTES
 RATES: dict[str, str] = {"0.5": "2× je Beat", "1": "Jeder Beat", "2": "Alle 2 Beats", "4": "Jeder Takt (4)"}
 
 
+# ---------- Automatische Musterwahl ----------
+# Muster nach Tempo: ruhige Titel weiche Bahnen, schnelle Titel eckige/harte Wechsel.
+AUTO_POOLS: dict[str, list[str]] = {
+    "ruhig": ["kreis", "acht", "ellipse", "pendel_quer", "pendel_laengs", "welle_quer",
+              "welle_laengs", "blume", "herz", "zufall", "suchlicht", "lissajous"],
+    "mittel": ["kreis", "acht", "welle_quer", "welle_laengs", "lissajous", "spirale", "blume",
+               "diagonale", "dreieck", "quadrat", "stern", "ellipse", "herz"],
+    "schnell": ["zickzack", "kreuz", "scanner", "stern", "diagonale", "dreieck", "quadrat",
+                "spirale", "lissajous", "acht", "welle_quer"],
+}
+AUTO_MODES = ["gespiegelt", "versetzt", "gleich"]
+# Wechsel: nach so vielen Muster-Durchläufen (0 = nur bei neuem Titel)
+AUTO_EVERY: dict[str, str] = {"1": "Jeder Durchlauf", "2": "Alle 2 Durchläufe", "4": "Alle 4 Durchläufe", "0": "Je Titel"}
+
+
+def tempo_class(bpm: float | None) -> str:
+    if not bpm or bpm < 100:
+        return "ruhig"
+    return "mittel" if bpm < 130 else "schnell"
+
+
+def auto_pick(bpm: float | None, key: str, slot: int, previous: str | None = None) -> tuple[str, str]:
+    """Muster und Modus fürs Tempo wählen. Gleicher Titel + gleicher Abschnitt = gleiche Wahl,
+    das direkt vorherige Muster wird nicht wiederholt."""
+    import random
+
+    pool = [p for p in AUTO_POOLS[tempo_class(bpm)] if p != previous] or AUTO_POOLS["mittel"]
+    rnd = random.Random(f"{key}|{slot}")
+    return rnd.choice(pool), rnd.choice(AUTO_MODES)
+
+
 def hex_rgb(h: str) -> tuple[int, int, int] | None:
     h = str(h or "").strip()
     if re.fullmatch(r"#?[0-9a-fA-F]{6}", h):

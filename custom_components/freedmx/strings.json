@@ -416,6 +416,14 @@
         "auto_lights": {
           "name": "auto_lights",
           "description": "auto_lights"
+        },
+        "auto_pattern": {
+          "name": "auto_pattern",
+          "description": "auto_pattern"
+        },
+        "auto_every": {
+          "name": "auto_every",
+          "description": "auto_every"
         }
       }
     }

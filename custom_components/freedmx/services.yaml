@@ -292,3 +292,12 @@ beat_settings:
       required: false
       selector:
         boolean:
+    auto_pattern:
+      required: false
+      selector:
+        boolean:
+    auto_every:
+      required: false
+      selector:
+        select:
+          options: ["0", "1", "2", "4"]

@@ -139,3 +139,22 @@ def test_estimate_bpm_from_audio():
         est = bc.estimate_bpm(_clicks(bpm), 11025)
         assert est is not None and (abs(est - bpm) < 1.0 or abs(est - 2 * bpm) < 2.0 or abs(est - bpm / 2) < 1.0), (bpm, est)
     assert bc.estimate_bpm([0.0] * 1000, 11025) is None
+
+
+def test_auto_pick_tempo_und_wechsel():
+    AUTO_POOLS, auto_pick, tempo_class = bc.AUTO_POOLS, bc.auto_pick, bc.tempo_class
+    ps = importlib.util.spec_from_file_location("patterns", ROOT / "patterns.py")
+    pm = importlib.util.module_from_spec(ps)
+    ps.loader.exec_module(pm)
+    MODES, PATTERNS = pm.MODES, pm.PATTERNS
+
+    assert all(p in PATTERNS for pool in AUTO_POOLS.values() for p in pool)
+    assert tempo_class(80) == "ruhig" and tempo_class(120) == "mittel" and tempo_class(140) == "schnell"
+    a = auto_pick(140, "x|y", 3)
+    assert a == auto_pick(140, "x|y", 3)            # gleicher Abschnitt = gleiche Wahl
+    assert a[0] in AUTO_POOLS["schnell"] and a[1] in MODES
+    prev = None
+    for slot in range(50):
+        pat, _ = auto_pick(90, "t", slot, prev)
+        assert pat in AUTO_POOLS["ruhig"] and pat != prev
+        prev = pat

@@ -16,6 +16,8 @@ from homeassistant.helpers.event import async_call_later, async_track_state_chan
 from homeassistant.helpers.storage import Store
 
 from .beatcore import (
+    AUTO_EVERY,
+    auto_pick,
     BARS,
     EFFECTS,
     PALETTES,
@@ -58,6 +60,8 @@ DEFAULTS: dict[str, Any] = {
     "colors": ["#ff0000", "#0050ff", "#00ff40"],   # eigene Farben
     "rate": 1.0,          # Beats je Effektschritt (0.5 = doppelt so schnell)
     "auto_lights": False, # gewählte Lampen mit der Musik ein-/ausschalten
+    "auto_pattern": True, # Bewegungsmuster wählt das System passend zum Tempo
+    "auto_every": 2,      # Musterwechsel alle n Durchläufe (0 = je Titel)
 }
 
 
@@ -87,6 +91,9 @@ class BeatEngine:
         self._last_pos: tuple[float, float] | None = None  # (Position s, Zeitpunkt)
         self._auto_on: set[str] = set()             # von der Automatik eingeschaltete Lampen
         self._auto_off: Callable[[], None] | None = None
+        self._auto_slot: tuple | None = None        # (Titel, Abschnitt) der letzten Musterwahl
+        self._auto_choice: tuple[str, str] | None = None
+        self.runner = None                          # PatternRunner (Moving Heads), wird nach dem Start gesetzt
 
     # ---------- Grundlagen ----------
     async def async_start(self) -> None:
@@ -123,6 +130,8 @@ class BeatEngine:
         return lambda: self._listeners.remove(cb) if cb in self._listeners else None
 
     def _notify(self) -> None:
+        if self.runner is not None:
+            self.runner.beat_changed()
         for cb in list(self._listeners):
             cb()
 
@@ -416,8 +425,11 @@ class BeatEngine:
                     continue
             if k == "rate":
                 v = min((0.5, 1.0, 2.0, 4.0), key=lambda r: abs(r - float(v)))
-            if k == "auto_lights":
+            if k in ("auto_lights", "auto_pattern"):
                 v = bool(v)
+            if k == "auto_every":
+                v = min((0, 1, 2, 4), key=lambda r: abs(r - int(v)))
+                self._auto_slot = None
             if k == "source":
                 changed_source = v != self.settings["source"]
             self.settings[k] = v
@@ -494,6 +506,22 @@ class BeatEngine:
             return None
         return (self.beat_now() / self.settings["bars"]) % 1.0
 
+    def auto_active(self) -> bool:
+        return bool(self.settings["enabled"] and self.settings["auto_pattern"] and self.clock.ready)
+
+    def auto_motion(self) -> tuple[str, str] | None:
+        """Vom System gewähltes (Muster, Modus) für den aktuellen Abschnitt – oder None."""
+        if not self.auto_active():
+            return None
+        every = int(self.settings["auto_every"])
+        cycle = int(self.beat_now() // max(1, int(self.settings["bars"])))
+        slot = (self.track.get("key") or "manuell", 0 if every == 0 else cycle // every)
+        if slot != self._auto_slot:
+            prev = self._auto_choice[0] if self._auto_choice else None
+            self._auto_choice = auto_pick(self.clock.bpm, slot[0], slot[1], prev)
+            self._auto_slot = slot
+        return self._auto_choice
+
     async def _run(self) -> None:
         try:
             while self.settings["enabled"] and self.settings["effect"] != "aus":
@@ -548,6 +576,10 @@ class BeatEngine:
             "farben": self.settings["colors"],
             "rate": self.settings["rate"],
             "auto_lights": self.settings["auto_lights"],
+            "auto_pattern": self.settings["auto_pattern"],
+            "auto_every": self.settings["auto_every"],
+            "auto_wechsel_wahl": AUTO_EVERY,
+            "auto_muster": self._auto_choice[0] if self._auto_choice and self.auto_active() else None,
             "paletten": {k: {"name": v[0], "farben": v[1]} for k, v in PALETTES.items()},
             "raten": RATES,
         }

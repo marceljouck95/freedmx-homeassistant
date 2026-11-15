@@ -158,7 +158,7 @@ BEAT_BPM_SCHEMA = BEAT_BASE_SCHEMA.extend(
 )
 BEAT_SETTING_KEYS = (
     "enabled", "source", "effect", "bars", "offset_ms", "intensity", "lamps", "manual_bpm",
-    "palette", "colors", "rate", "auto_lights",
+    "palette", "colors", "rate", "auto_lights", "auto_pattern", "auto_every",
 )
 BEAT_SETTINGS_SCHEMA = BEAT_BASE_SCHEMA.extend(
     {
@@ -174,6 +174,8 @@ BEAT_SETTINGS_SCHEMA = BEAT_BASE_SCHEMA.extend(
         vol.Optional("colors"): vol.All(cv.ensure_list, [cv.string]),
         vol.Optional("rate"): vol.All(vol.Coerce(float), vol.In([0.5, 1.0, 2.0, 4.0])),
         vol.Optional("auto_lights"): cv.boolean,
+        vol.Optional("auto_pattern"): cv.boolean,
+        vol.Optional("auto_every"): vol.All(vol.Coerce(int), vol.In([0, 1, 2, 4])),
     }
 )
 
@@ -506,6 +508,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     engine = BeatEngine(hass, entry, device, conf)
     hass.data[DOMAIN].setdefault("beats", {})[entry.entry_id] = engine
     runner.beat = engine
+    engine.runner = runner
     await engine.async_start()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     engine.notify()  # Beat-Sensor kennt jetzt alle Entitäten (Muster, Tempo …)
@@ -530,6 +533,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             runner.stop()
         engine = hass.data.get(DOMAIN, {}).get("beats", {}).pop(entry.entry_id, None)
         if engine:
+            engine.runner = None
             await engine.async_stop()
         await entry.runtime_data.async_stop()
     return unloaded

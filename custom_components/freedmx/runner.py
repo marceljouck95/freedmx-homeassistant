@@ -32,6 +32,7 @@ class PatternRunner:
         self._phase = 0.0
         self.beat = None  # BeatEngine (Takt aus Music Assistant), wird nach dem Start gesetzt
         self._task: asyncio.Task | None = None
+        self._auto_driving = False  # Muster wird gerade vom Beat-Sync gewählt
         self._listeners: list[Callable[[], None]] = []
 
     def add_listener(self, cb: Callable[[], None]) -> Callable[[], None]:
@@ -44,6 +45,10 @@ class PatternRunner:
 
     def set(self, *, pattern: str | None = None, mode: str | None = None,
             tempo: float | None = None, size: float | None = None) -> None:
+        if (pattern is not None or mode is not None) and self.beat is not None and self.beat.settings.get("auto_pattern"):
+            # Muster/Modus von Hand gewählt: Automatik aus, die Wahl bleibt bestehen
+            self._auto_driving = False
+            self.beat.update(auto_pattern=False)
         if pattern is not None and (pattern == OFF or pattern in PATTERNS):
             self.pattern = pattern
         if mode is not None and mode in MODES:
@@ -57,6 +62,27 @@ class PatternRunner:
         elif self._task is None or self._task.done():
             self._task = self._hass.async_create_background_task(self._run(), name="freedmx_muster")
         self._notify()
+
+    def beat_changed(self) -> None:
+        """Beat-Sync hat sich geändert: Automatik starten bzw. beenden."""
+        if self.beat is not None and self.beat.auto_active():
+            if self._task is None or self._task.done():
+                self._task = self._hass.async_create_background_task(self._run(), name="freedmx_muster")
+        elif self._auto_driving:
+            # Musik pausiert/aus oder Automatik abgeschaltet: Köpfe bleiben stehen
+            self._auto_driving = False
+            self.pattern = OFF
+            self.stop()
+            self._notify()
+
+    def _apply_auto(self) -> None:
+        choice = self.beat.auto_motion() if self.beat is not None else None
+        if choice is None:
+            return
+        self._auto_driving = True
+        if (self.pattern, self.mode) != choice:
+            self.pattern, self.mode = choice
+            self._notify()
 
     def stop(self) -> None:
         if self._task and not self._task.done():
@@ -73,7 +99,9 @@ class PatternRunner:
 
     async def _run(self) -> None:
         bounds = self._room.bounds()
+        self._apply_auto()
         while self.pattern != OFF:
+            self._apply_auto()
             synced = self.beat.motion_phase() if self.beat is not None else None
             if synced is not None:
                 self._phase = synced  # Muster im Takt: ein Durchlauf = eingestellte Anzahl Beats

@@ -235,3 +235,49 @@ async def test_audio_analysis_fallback(hass: HomeAssistant, no_network, aioclien
     assert pb.call_args[0][1] == "https://cdn.example/p.mp3"
     assert engine.clock.bpm == pytest.approx(126.5) and engine.bpm_source == "Audio-Analyse"
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_auto_pattern(hass: HomeAssistant, no_network):
+    """Beat-Sync wählt Muster und Modus selbst, Handwahl schaltet die Automatik ab."""
+    from custom_components.freedmx.beatcore import AUTO_POOLS
+
+    entry = await _setup(hass)
+    engine = hass.data["freedmx"]["beats"][entry.entry_id]
+    runner = hass.data["freedmx"]["runners"][entry.entry_id]
+    device = entry.runtime_data
+    mh = next(s.entity_id for s in hass.states.async_all("light") if s.attributes.get("lamp_id") == "mh1")
+    await hass.services.async_call("light", "turn_on", {"entity_id": mh}, blocking=True)
+    assert runner.pattern == "aus"
+
+    # Beat-Sync an (schnelles Tempo) -> Muster aus dem schnellen Vorrat, Kopf bewegt sich
+    await hass.services.async_call("freedmx", "beat_settings", {"source": "manuell", "manual_bpm": 140, "enabled": True, "bars": 1, "auto_every": 1}, blocking=True)
+    await asyncio.sleep(0.1)
+    assert engine.settings["auto_pattern"] is True
+    assert runner.pattern in AUTO_POOLS["schnell"]
+    pans = set()
+    for _ in range(30):
+        pans.add(tuple(device.get_channels(130, 2)))
+        await asyncio.sleep(0.03)
+    assert len(pans) > 3
+
+    # Abschnittswechsel -> neues Muster (nie zweimal dasselbe hintereinander)
+    seen = []
+    for _ in range(6):
+        engine.nudge(1.0)
+        await asyncio.sleep(0.06)
+        seen.append(runner.pattern)
+    assert all(a != b for a, b in zip(seen, seen[1:])), seen
+
+    # Pause (Beat-Sync aus) -> Köpfe bleiben stehen
+    await hass.services.async_call("freedmx", "beat_settings", {"enabled": False}, blocking=True)
+    assert runner.pattern == "aus"
+
+    # Handwahl -> Automatik aus, gewähltes Muster bleibt
+    await hass.services.async_call("freedmx", "beat_settings", {"enabled": True}, blocking=True)
+    await asyncio.sleep(0.06)
+    select = next(s.entity_id for s in hass.states.async_all("select") if s.entity_id.endswith("movement_pattern"))
+    await hass.services.async_call("select", "select_option", {"entity_id": select, "option": "Kreis"}, blocking=True)
+    await asyncio.sleep(0.1)
+    assert engine.settings["auto_pattern"] is False
+    assert runner.pattern == "kreis"
+    await hass.config_entries.async_unload(entry.entry_id)
