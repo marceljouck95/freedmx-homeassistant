@@ -8,6 +8,8 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
+
+from .protocol import DEFAULT_SEND_RATE
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
@@ -24,6 +26,7 @@ from .const import (
     ATTR_SCENE_ID,
     ATTR_VALUES,
     CONF_BIND,
+    CONF_SEND_RATE,
     CONF_LAMPS,
     CONF_POSITIONS,
     CONF_ROOM,
@@ -479,7 +482,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     conf = merged_config(entry)
     host = str(conf.get(CONF_HOST, DEFAULT_HOST))
     port = int(conf.get(CONF_PORT, DEFAULT_PORT))
-    device = FreeDmxDevice(hass, host, port, conf.get(CONF_BIND) or None)
+    device = FreeDmxDevice(
+        hass, host, port, conf.get(CONF_BIND) or None, conf.get(CONF_SEND_RATE, DEFAULT_SEND_RATE)
+    )
     try:
         await device.async_start()
     except OSError as err:

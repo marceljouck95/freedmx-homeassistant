@@ -32,6 +32,7 @@ from homeassistant.helpers.selector import (
 
 from .const import (
     CONF_BIND,
+    CONF_SEND_RATE,
     CONF_LAMPS,
     CONF_POSITIONS,
     DEFAULT_HOST,
@@ -52,6 +53,7 @@ from .const import (
 )
 from .protocol import FRAME_CHANNELS as DMX_CHANNELS, layout_to_text, parse_layout
 from .const import CONF_ROOM
+from .protocol import DEFAULT_SEND_RATE, SEND_RATES
 from .geometry import (
     MOUNT_DEFAULTS,
     MOUNT_HEIGHT,
@@ -108,6 +110,13 @@ def _settings_schema(with_name: bool) -> vol.Schema:
             vol.Required(CONF_HOST, default=DEFAULT_HOST): TextSelector(),
             vol.Required(CONF_PORT, default=DEFAULT_PORT): _num(1, 65535),
             vol.Optional(CONF_BIND, default=""): TextSelector(),
+            vol.Required(CONF_SEND_RATE, default=DEFAULT_SEND_RATE): SelectSelector(
+                SelectSelectorConfig(
+                    options=list(SEND_RATES),
+                    translation_key=CONF_SEND_RATE,
+                    mode=SelectSelectorMode.LIST,
+                )
+            ),
         }
     )
     return vol.Schema(fields)
@@ -127,6 +136,7 @@ def _clean_settings(user_input: dict) -> dict:
         CONF_HOST: str(user_input[CONF_HOST]).strip(),
         CONF_PORT: int(user_input[CONF_PORT]),
         CONF_BIND: bind,
+        CONF_SEND_RATE: user_input.get(CONF_SEND_RATE) if user_input.get(CONF_SEND_RATE) in SEND_RATES else DEFAULT_SEND_RATE,
     }
 
 

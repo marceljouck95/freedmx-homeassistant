@@ -8,12 +8,14 @@
           "name": "Name",
           "host": "IP-Adresse",
           "port": "Port",
-          "bind": "Lokale IP (optional)"
+          "bind": "Lokale IP (optional)",
+          "send_rate": "Sendetakt"
         },
         "data_description": {
           "host": "IP des freeDMX. Im Geräte-WLAN ist das 192.168.4.1.",
           "port": "Werkseinstellung: 10100",
-          "bind": "Nur nötig, wenn Home Assistant mehrere Netzwerkadapter hat. Leer lassen für Standard."
+          "bind": "Nur nötig, wenn Home Assistant mehrere Netzwerkadapter hat. Leer lassen für Standard.",
+          "send_rate": "Wie oft Änderungen ans freeDMX gesendet werden. Ohne Änderung wird nur alle 0,5 s aufgefrischt."
         }
       }
     },
@@ -44,12 +46,14 @@
         "data": {
           "host": "IP-Adresse",
           "port": "Port",
-          "bind": "Lokale IP (optional)"
+          "bind": "Lokale IP (optional)",
+          "send_rate": "Sendetakt"
         },
         "data_description": {
           "host": "IP des freeDMX. Im Geräte-WLAN ist das 192.168.4.1.",
           "port": "Werkseinstellung: 10100",
-          "bind": "Nur nötig, wenn Home Assistant mehrere Netzwerkadapter hat. Leer lassen für Standard."
+          "bind": "Nur nötig, wenn Home Assistant mehrere Netzwerkadapter hat. Leer lassen für Standard.",
+          "send_rate": "Wie oft Änderungen ans freeDMX gesendet werden. Ohne Änderung wird nur alle 0,5 s aufgefrischt."
         }
       },
       "lamp": {
@@ -145,6 +149,13 @@
         "fe1500": "Eurolite FE-1500 Hybrid (9 Kanäle)",
         "ledbar5": "Eurolite LED Bar RGB 126/10 (5 Kanäle)",
         "custom": "Eigene Belegung"
+      }
+    },
+    "send_rate": {
+      "options": {
+        "fast": "Schnell – 25/s (40 ms, wie QLC+)",
+        "normal": "Normal – 20/s (50 ms, empfohlen)",
+        "gentle": "Schonend – 10/s (100 ms)"
       }
     }
   },

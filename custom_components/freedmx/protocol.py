@@ -25,7 +25,16 @@ DEFAULT_PORT = 10100
 FRAME_CHANNELS = 512
 FRAME_BYTES_PER_CHANNEL = 3
 DATAGRAM_SIZE = 250
-FRAME_INTERVAL = 0.04  # 25 Frames pro Sekunde
+FRAME_INTERVAL = 0.04  # 25 Frames pro Sekunde (Protokoll/QLC+-Standard)
+
+# Sendetakt bei Änderungen (Sekunden zwischen zwei Frames), wählbar in den Optionen
+SEND_RATES: dict[str, float] = {
+    "fast": 0.04,    # 25 Frames/s wie QLC+
+    "normal": 0.05,  # 20 Frames/s (Standard)
+    "gentle": 0.1,   # 10 Frames/s
+}
+DEFAULT_SEND_RATE = "normal"
+IDLE_REFRESH = 0.5  # ohne Änderung: Puffer alle 0,5 s erneut senden
 
 HANDSHAKE = b"\xE5\x39\x60\x00"
 TERMINATE = b"\xAC\x00"

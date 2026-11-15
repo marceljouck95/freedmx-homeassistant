@@ -5,6 +5,7 @@ from .protocol import DEFAULT_HOST, DEFAULT_PORT
 DOMAIN = "freedmx"
 
 CONF_BIND = "bind"
+CONF_SEND_RATE = "send_rate"
 CONF_LAMPS = "lamps"
 CONF_POSITIONS = "positions"
 

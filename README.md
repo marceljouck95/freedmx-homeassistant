@@ -60,7 +60,7 @@ data:
 
 ## Ablauf des Protokolls (umgesetzt)
 1. Handshake `E5 39 60 00`, bis das Gerät mit `A7` oder `F0 64` antwortet.
-2. Danach alle 40 ms ein Frame aus 512 Kanälen (1536 Byte), aufgeteilt in 7 UDP-Pakete.
+2. Danach Frames aus 512 Kanälen (1536 Byte), aufgeteilt in 7 UDP-Pakete. Das Protokoll (wie QLC+) sendet dauerhaft alle 40 ms. Die Integration sendet nur bei Änderungen, höchstens im eingestellten Sendetakt (Standard 50 ms, wählbar 40/50/100 ms unter Optionen → Verbindung), und frischt ohne Änderung alle 0,5 s auf.
 3. Kommt 2 s lang kein `F0 64`, gilt das Gerät als getrennt und der Handshake wird wiederholt.
 4. Beim Entladen der Integration wird `AC 00` gesendet.
 
@@ -91,4 +91,4 @@ Neue Entitäten: `sensor.…_beat_tempo` (BPM, alle Infos als Attribute), `switc
 Neue Dienste: `freedmx.beat_settings`, `freedmx.beat_bpm`, `freedmx.beat_align`, `freedmx.beat_tap`.
 Neue Karte: `custom:freedmx-beat-card` (in derselben Datei wie die Raum-Karte, Einstellungen im Karten-Editor).
 
-**Grenzen:** Der Takt wird aus Tempo und Wiedergabeposition berechnet, nicht aus dem Ton selbst. Bei Titeln mit langem Intro ohne Schlag oder mit wechselndem Tempo kann er leicht danebenliegen. Dafür gibt es ±¼ Beat; die Korrektur wird je Titel gemerkt. Die Sendeschleife arbeitet mit 25 Bildern/s, Effekte sind also auf ±20 ms genau.
+**Grenzen:** Der Takt wird aus Tempo und Wiedergabeposition berechnet, nicht aus dem Ton selbst. Bei Titeln mit langem Intro ohne Schlag oder mit wechselndem Tempo kann er leicht danebenliegen. Dafür gibt es ±¼ Beat; die Korrektur wird je Titel gemerkt. Beim Sendetakt „Normal“ (20 Bilder/s) sind Effekte auf ±25 ms genau.

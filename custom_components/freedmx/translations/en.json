@@ -8,12 +8,14 @@
           "name": "Name",
           "host": "IP address",
           "port": "Port",
-          "bind": "Local IP (optional)"
+          "bind": "Local IP (optional)",
+          "send_rate": "Send rate"
         },
         "data_description": {
           "host": "IP of the freeDMX. In its own Wi-Fi this is 192.168.4.1.",
           "port": "Factory default: 10100",
-          "bind": "Only needed if Home Assistant has several network adapters. Leave empty for default."
+          "bind": "Only needed if Home Assistant has several network adapters. Leave empty for default.",
+          "send_rate": "How often changes are sent to the freeDMX. Without changes the buffer is refreshed every 0.5 s."
         }
       }
     },
@@ -44,12 +46,14 @@
         "data": {
           "host": "IP address",
           "port": "Port",
-          "bind": "Local IP (optional)"
+          "bind": "Local IP (optional)",
+          "send_rate": "Send rate"
         },
         "data_description": {
           "host": "IP of the freeDMX. In its own Wi-Fi this is 192.168.4.1.",
           "port": "Factory default: 10100",
-          "bind": "Only needed if Home Assistant has several network adapters. Leave empty for default."
+          "bind": "Only needed if Home Assistant has several network adapters. Leave empty for default.",
+          "send_rate": "How often changes are sent to the freeDMX. Without changes the buffer is refreshed every 0.5 s."
         }
       },
       "lamp": {
@@ -145,6 +149,13 @@
         "fe1500": "Eurolite FE-1500 Hybrid (9 channels)",
         "ledbar5": "Eurolite LED Bar RGB 126/10 (5 channels)",
         "custom": "Custom layout"
+      }
+    },
+    "send_rate": {
+      "options": {
+        "fast": "Fast – 25/s (40 ms, like QLC+)",
+        "normal": "Normal – 20/s (50 ms, recommended)",
+        "gentle": "Gentle – 10/s (100 ms)"
       }
     }
   },

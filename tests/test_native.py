@@ -123,7 +123,15 @@ def test_device_end_to_end():
         assert dev.connected, "Gerät sollte nach Handshake verbunden sein"
         assert log[0] == p.HANDSHAKE
         frames = [x for x in log if len(x) == 250 or len(x) == 36]
-        assert len(frames) >= 7 * 10, f"zu wenige Frame-Pakete: {len(frames)}"
+        # Ohne Änderung nur Auffrischung alle 0,5 s: ca. 3-5 Frames statt 37
+        assert 7 * 2 <= len(frames) <= 7 * 6, f"falsche Anzahl Frame-Pakete: {len(frames)}"
+        # Viele Änderungen hintereinander: höchstens ein Frame je Sendetakt (50 ms)
+        before = dev.frames_sent
+        for i in range(100):
+            dev.set_channels(1, [i, 0, 0])
+            await asyncio.sleep(0.01)
+        sent = dev.frames_sent - before
+        assert 10 <= sent <= 25, f"Sendetakt nicht begrenzt: {sent} Frames in ~1 s"
         assert frames[0][:3].hex(" ").upper() == "C1 00 7F"   # Kanal 1 = 255
         await dev.async_stop()
         await asyncio.sleep(0.1)

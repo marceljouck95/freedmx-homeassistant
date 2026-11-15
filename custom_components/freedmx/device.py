@@ -13,8 +13,10 @@ from .protocol import (
     ACK_TIMEOUT,
     ACK_WORD,
     FRAME_CHANNELS,
-    FRAME_INTERVAL,
+    DEFAULT_SEND_RATE,
     HANDSHAKE,
+    IDLE_REFRESH,
+    SEND_RATES,
     HANDSHAKE_REPLIES,
     TERMINATE,
     build_datagrams,
@@ -27,7 +29,11 @@ PING_AFTER = 1.5
 
 
 class FreeDmxDevice(asyncio.DatagramProtocol):
-    """Hält den 512-Kanal-Puffer und sendet ihn im 40-ms-Takt an das freeDMX."""
+    """Hält den 512-Kanal-Puffer und sendet ihn an das freeDMX.
+
+    Bei Änderungen höchstens im eingestellten Takt (Standard 50 ms),
+    ohne Änderung nur alle IDLE_REFRESH Sekunden zur Auffrischung.
+    """
 
     def __init__(
         self,
@@ -35,12 +41,17 @@ class FreeDmxDevice(asyncio.DatagramProtocol):
         host: str,
         port: int,
         bind_ip: str | None,
+        send_rate: str = DEFAULT_SEND_RATE,
     ) -> None:
         self._hass = hass
         self.host = host
         self.port = port
         self.bind_ip = bind_ip
         self._values = bytearray(FRAME_CHANNELS)
+        self.interval = SEND_RATES.get(send_rate, SEND_RATES[DEFAULT_SEND_RATE])
+        self._dirty = True
+        self._last_send = -IDLE_REFRESH
+        self.frames_sent = 0
         self._transport: asyncio.DatagramTransport | None = None
         self._task: asyncio.Task | None = None
         self._connected = False
@@ -77,6 +88,7 @@ class FreeDmxDevice(asyncio.DatagramProtocol):
         if value:
             self._last_handshake = -HANDSHAKE_INTERVAL
             self._last_seen = 0.0
+            self._dirty = True
         else:
             if self._transport and self._addr:
                 self._transport.sendto(TERMINATE, self._addr)
@@ -119,6 +131,7 @@ class FreeDmxDevice(asyncio.DatagramProtocol):
         first, last = start, start + len(values) - 1
         for guard in self.guards:
             guard(self._values, first, last)
+        self._dirty = True
         for listener in list(self._value_listeners):
             listener(first, last)
 
@@ -181,9 +194,16 @@ class FreeDmxDevice(asyncio.DatagramProtocol):
                 self._last_handshake = now
                 self._transport.sendto(HANDSHAKE, self._addr)
 
-            for datagram in build_datagrams(self._values):
-                self._transport.sendto(datagram, self._addr)
-            await asyncio.sleep(FRAME_INTERVAL)
+            # Senden nur bei Änderung (höchstens im eingestellten Takt)
+            # oder zur Auffrischung, damit der Controller nicht überlastet wird.
+            since = now - self._last_send
+            if (self._dirty and since >= self.interval) or since >= IDLE_REFRESH:
+                self._dirty = False
+                self._last_send = now
+                self.frames_sent += 1
+                for datagram in build_datagrams(self._values):
+                    self._transport.sendto(datagram, self._addr)
+            await asyncio.sleep(min(self.interval, 0.05))
 
     # ---------- Empfang (nur Lebenszeichen) ----------
     def datagram_received(self, data: bytes, addr) -> None:
