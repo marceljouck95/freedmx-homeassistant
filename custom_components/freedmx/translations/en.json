@@ -443,6 +443,14 @@
         "live_interval": {
           "name": "Live tempo interval",
           "description": "Live tempo interval"
+        },
+        "palette_all": {
+          "name": "Palette for all effects",
+          "description": "Palette for all effects"
+        },
+        "laser": {
+          "name": "Laser on the beat (FE-1500)",
+          "description": "Laser on the beat (FE-1500)"
         }
       }
     }

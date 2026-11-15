@@ -443,6 +443,14 @@
         "live_interval": {
           "name": "live_interval",
           "description": "live_interval"
+        },
+        "palette_all": {
+          "name": "palette_all",
+          "description": "palette_all"
+        },
+        "laser": {
+          "name": "laser",
+          "description": "laser"
         }
       }
     }

@@ -443,6 +443,14 @@
         "live_interval": {
           "name": "Messintervall Live-Tempo",
           "description": "Messintervall Live-Tempo"
+        },
+        "palette_all": {
+          "name": "Palette bei allen Effekten",
+          "description": "Palette bei allen Effekten"
+        },
+        "laser": {
+          "name": "Laser im Takt (FE-1500)",
+          "description": "Laser im Takt (FE-1500)"
         }
       }
     }

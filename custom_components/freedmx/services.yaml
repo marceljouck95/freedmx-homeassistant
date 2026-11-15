@@ -310,3 +310,11 @@ beat_settings:
       selector:
         select:
           options: ["5", "10"]
+    palette_all:
+      required: false
+      selector:
+        boolean:
+    laser:
+      required: false
+      selector:
+        boolean:

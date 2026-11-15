@@ -243,35 +243,169 @@ def apply_effect(layout: list, base: list[int], level: float, color: tuple[int, 
     return [max(0, min(255, int(v))) for v in vals]
 
 
+def effect_color(effect: str, beat: float, index: int, ncolors: int) -> int | None:
+    """Farbindex für Effekte ohne eigenen Farbwechsel (Puls, Blitz, Lauflicht, Wechsel),
+    damit auch dort die gewählte Palette leuchtet statt der Lampenfarbe (meist Weiß)."""
+    if effect in ("aus", "farbe", "puls_farbe"):
+        return None
+    n = math.floor(beat)
+    ncolors = max(1, ncolors)
+    if effect == "wechsel":
+        return (n + index) % ncolors
+    return n % ncolors
+
+
+# ---------- Lampentypen ----------
+
+def lamp_kind(layout: list, preset: str | None = None) -> str | None:
+    """Sonder-Lampe erkennen – über die Voreinstellung oder (bei „Eigenes Layout“) über das Layout."""
+    if preset in ("fe1500", "dmh40"):
+        return preset
+    if len(layout) == 9 and all(isinstance(t, int) for t in layout) and layout[0] >= 220:
+        return "fe1500"  # 9 feste Kanäle, Kanal 1 = DMX-Betriebsart
+    if len(layout) == 14 and layout[:2] == ["P", "T"] and layout[10] == "D" and isinstance(layout[3], int):
+        return "dmh40"
+    return None
+
+
 def effect_capable(layout: list, preset: str | None = None) -> bool:
-    return preset in SPECIAL_EFFECT or "D" in layout or all(c in layout for c in ("R", "G", "B"))
+    return lamp_kind(layout, preset) in SPECIAL_EFFECT or "D" in layout or all(c in layout for c in ("R", "G", "B"))
+
+
+def _norm_color(color: tuple[int, int, int]) -> tuple[tuple[float, float, float], float]:
+    """Farbe auf volle Helligkeit bringen (hellster Anteil = 255) und Sättigung 0…1."""
+    hi = max(color)
+    if hi <= 0:
+        return (255.0, 255.0, 255.0), 0.0
+    return tuple(c * 255.0 / hi for c in color), (hi - min(color)) / hi
+
+
+def nearest_fixed(color: tuple[int, int, int], table: list[tuple[tuple[int, int, int], int]],
+                  white: int, min_sat: float = 0.25) -> int:
+    """Nächstliegenden Festwert zu einer RGB-Farbe; wenig gesättigte Farben = Weiß."""
+    norm, sat = _norm_color(color)
+    if sat < min_sat:
+        return white
+    return min(table, key=lambda fc: sum((a - b) ** 2 for a, b in zip(fc[0], norm)))[1]
+
+
+# Futurelight DMH-40: Farbrad (Kanal 4), Mitte des jeweiligen Bereichs
+DMH40_WHEEL_CH = 3
+DMH40_WHITE = 7
+DMH40_WHEEL: list[tuple[tuple[int, int, int], int]] = [
+    ((255, 0, 0), 22),        # Rot
+    ((0, 0, 255), 37),        # Blau
+    ((0, 255, 0), 52),        # Grün
+    ((255, 255, 120), 67),    # Hellgelb
+    ((255, 0, 255), 82),      # Magenta
+    ((255, 110, 80), 97),     # Lachsrot
+    ((100, 180, 255), 112),   # Hellblau
+    ((255, 100, 180), 124),   # Pink
+]
+WHEEL_GAP = 0.25  # Farbrad ist mechanisch: höchstens alle 250 ms wechseln
+
+
+def dmh40_wheel(color: tuple[int, int, int] | int | None) -> int | None:
+    """Farbrad-Wert des DMH-40 für eine Wunschfarbe (None = Farbrad nicht anfassen)."""
+    if isinstance(color, int):
+        color = PALETTE[color % len(PALETTE)]
+    if color is None:
+        return None
+    return nearest_fixed(color, DMH40_WHEEL, DMH40_WHITE)
+
+
+def hold_mechanical(state: dict, key: str, want: int, now: float, gap: float = WHEEL_GAP) -> int:
+    """Mechanische Räder schonen: neuer Wert erst, wenn der letzte Wechsel ≥ gap s her ist."""
+    last = state.get(key)
+    if last is None or (last[0] != want and now - last[1] >= gap):
+        state[key] = (want, now)
+        return want
+    return last[0]
+
+
+def dmh40_effect(layout: list, base: list[int], level: float, color, wheel: int | None) -> list[int]:
+    """DMH-40: Dimmer im Takt (wie jede Dimmer-Lampe), Farbe über das Farbrad."""
+    vals = apply_effect(layout, base, level, None)
+    if wheel is not None and len(vals) > DMH40_WHEEL_CH:
+        vals[DMH40_WHEEL_CH] = wheel
+    return vals
 
 
 # ---------- Sonder-Lampen ohne Dimmer/RGB ----------
-# FE-1500: Kanal 1 Betriebsart (≥220 = DMX), Kanal 2 LED-Farben (feste Farbwerte).
+# FE-1500: Kanal 1 Betriebsart (≥220 = DMX), Kanal 2 LED-Farben (feste Farbwerte, je Bereichsmitte).
+FE_DMX = 230
+FE_WHITE = 32
 FE_COLORS: list[tuple[tuple[int, int, int], int]] = [
-    ((255, 0, 0), 12), ((0, 255, 0), 17), ((0, 0, 255), 22), ((255, 140, 0), 27), ((255, 255, 255), 32),
+    ((255, 0, 0), 12),        # Rot
+    ((0, 255, 0), 17),        # Grün
+    ((0, 0, 255), 22),        # Blau
+    ((255, 140, 0), 27),      # Amber
+    ((255, 255, 255), 32),    # Weiß
+    ((255, 128, 128), 37),    # Weiß + Rot
+    ((255, 255, 0), 42),      # Rot + Grün
+    ((0, 255, 255), 47),      # Grün + Blau
+    ((128, 255, 128), 62),    # Weiß + Grün
+    ((165, 255, 0), 67),      # Grün + Amber
+    ((255, 70, 0), 72),       # Amber + Rot
+    ((255, 0, 255), 77),      # Rot + Blau
+    ((128, 128, 255), 82),    # Blau + Weiß
 ]
+FE_LASER_RED, FE_LASER_GREEN, FE_LASER_BOTH = 30, 70, 110
+FE_SPIN = 20  # Drehung „leicht an“, wenn sie gestoppt ist (0…4)
 
 
-def fe1500_effect(base: list[int], level: float, color: tuple[int, int, int] | int | None) -> list[int]:
-    """Beat-Effekt für den FE-1500: LEDs im Takt an/aus, Farbe auf die nächste LED-Farbe gerundet."""
+def fe1500_color(color: tuple[int, int, int] | int | None) -> int | None:
+    if isinstance(color, int):
+        color = PALETTE[color % len(PALETTE)]
+    if color is None:
+        return None
+    return nearest_fixed(color, FE_COLORS, FE_WHITE)
+
+
+def fe1500_laser(color: tuple[int, int, int] | None) -> int:
+    """Laser hat nur Rot und Grün: warme Farben Rot, grüne Grün, sonst beide im Wechsel."""
+    if color is None:
+        return FE_LASER_BOTH
+    r, g, b = color
+    if g > r and g >= b:
+        return FE_LASER_GREEN
+    if r >= g and r >= b:
+        return FE_LASER_RED
+    return FE_LASER_BOTH
+
+
+def fe1500_effect(base: list[int], level: float, color: tuple[int, int, int] | int | None,
+                  threshold: float = 0.5, laser: bool = True) -> list[int]:
+    """Beat-Effekt für den FE-1500 (kein Dimmer): LEDs und Laser im Takt an/aus,
+    Farbe auf die nächste LED-Farbe gerundet, Drehung leicht an."""
     vals = list(base)
     if len(vals) < 2:
         return vals
-    vals[0] = max(int(vals[0]), 220)  # DMX-Steuerung, sonst reagiert nichts
+    vals[0] = FE_DMX if not 220 <= vals[0] <= 255 else vals[0]  # DMX-Steuerung, sonst reagiert nichts
     if isinstance(color, int):
         color = PALETTE[color % len(PALETTE)]
+    on = level >= threshold - 1e-9
     if color is not None:
-        vals[1] = min(FE_COLORS, key=lambda fc: sum((a - b) ** 2 for a, b in zip(fc[0], color)))[1]
+        vals[1] = fe1500_color(color)
     elif vals[1] < 10:
         vals[1] = 160  # LEDs waren aus: alle Farben
-    if level < 0.5:
+    if len(vals) >= 9:
+        if laser:
+            if vals[5] < 10:  # kein Laser von Hand gewählt: passend zur Farbe
+                vals[5] = fe1500_laser(color)
+        else:
+            vals[5] = 0
+        for i in (7, 8):  # LED- und Laser-Drehung
+            if vals[i] < 5:
+                vals[i] = FE_SPIN
+    if not on:
         vals[1] = 0  # zwischen den Schlägen LEDs aus
+        if len(vals) >= 6:
+            vals[5] = 0  # … und Laser aus
     return [max(0, min(255, int(v))) for v in vals]
 
 
-SPECIAL_EFFECT = {"fe1500": fe1500_effect}
+SPECIAL_EFFECT = {"fe1500": fe1500_effect, "dmh40": dmh40_effect}
 
 
 # ---------- Titel für die Tempo-Suche ----------

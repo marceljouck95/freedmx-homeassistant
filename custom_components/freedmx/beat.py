@@ -17,7 +17,12 @@ from homeassistant.helpers.storage import Store
 
 from .beatcore import (
     AUTO_EVERY,
-    SPECIAL_EFFECT,
+    dmh40_effect,
+    dmh40_wheel,
+    effect_color,
+    fe1500_effect,
+    hold_mechanical,
+    lamp_kind,
     auto_pick,
     segment_seconds,
     BARS,
@@ -68,6 +73,8 @@ DEFAULTS: dict[str, Any] = {
     "auto_every": 0,
     "live_bpm": True,     # Radio-Streams selbst mithören und das Tempo messen
     "live_interval": 5,   # Sekunden zwischen zwei Messungen (5 = normal, 10 = ruhig)      # Musterwechsel alle n Durchläufe (0 = nach Titellänge)
+    "palette_all": True,  # Palette auch bei Puls/Blitz/Lauflicht/Wechsel (sonst Lampenfarbe)
+    "laser": True,        # FE-1500: Laser im Takt
 }
 
 
@@ -94,6 +101,7 @@ class BeatEngine:
         self._task: asyncio.Task | None = None
         self._lookup: asyncio.Task | None = None
         self._touched: set[str] = set()             # Lampen, die der Effekt gerade schreibt
+        self._wheels: dict[str, tuple[int, float]] = {}  # Farbrad je Lampe (Wert, Zeitpunkt des Wechsels)
         self._last_pos: tuple[float, float] | None = None  # (Position s, Zeitpunkt)
         self._auto_on: set[str] = set()             # von der Automatik eingeschaltete Lampen
         self._auto_off: Callable[[], None] | None = None
@@ -476,7 +484,7 @@ class BeatEngine:
                 v = min((0.5, 1.0, 2.0, 4.0), key=lambda r: abs(r - float(v)))
             if k == "live_interval":
                 v = 10 if int(v) >= 8 else 5
-            if k in ("auto_lights", "auto_pattern", "live_bpm"):
+            if k in ("auto_lights", "auto_pattern", "live_bpm", "palette_all", "laser"):
                 v = bool(v)
             if k == "auto_every":
                 v = min((0, 1, 2, 4), key=lambda r: abs(r - int(v)))
@@ -508,6 +516,15 @@ class BeatEngine:
             if effect_capable(lay, l.get("preset")):
                 out.append({"id": l["id"], "name": l.get("name", l["id"])})
         return out
+
+    def _has_kind(self, kind: str) -> bool:
+        for l in self._lamps:
+            try:
+                if lamp_kind(parse_layout(l["layout"]), l.get("preset")) == kind:
+                    return True
+            except (KeyError, ValueError):
+                continue
+        return False
 
     def _effect_lamps(self) -> list[tuple[dict, list, Any]]:
         chosen = self.settings["lamps"]
@@ -580,6 +597,25 @@ class BeatEngine:
             self._auto_slot = slot
         return self._auto_choice
 
+    def _frame(self, lamp: dict, lay: list, light, beat: float, i: int, n: int, inten: float, cols: list) -> list[int]:
+        """Werte einer Lampe für den aktuellen Beat – Farbwunsch je Lampentyp umgesetzt."""
+        effect = self.settings["effect"]
+        level, ci = effect_frame(effect, beat, i, n, inten, len(cols))
+        if ci is None and self.settings["palette_all"]:
+            ci = effect_color(effect, beat, i, len(cols))
+        color = cols[ci] if ci is not None else None
+        base = light._target()
+        kind = lamp_kind(lay, lamp.get("preset"))
+        if kind == "fe1500":
+            # kein Dimmer: an in der oberen Hälfte des Pulses (gleich bei jeder Stärke)
+            return fe1500_effect(base, level, color, 1.0 - inten / 2.0, bool(self.settings["laser"]))
+        if kind == "dmh40":
+            wheel = dmh40_wheel(color)
+            if wheel is not None:
+                wheel = hold_mechanical(self._wheels, lamp["id"], wheel, time.monotonic())
+            return dmh40_effect(lay, base, level, color, wheel)
+        return apply_effect(lay, base, level, color)
+
     async def _run(self) -> None:
         try:
             while self.settings["enabled"] and self.settings["effect"] != "aus":
@@ -595,11 +631,7 @@ class BeatEngine:
                     inten = self.settings["intensity"] / 100.0
                     cols = palette_rgb(self.settings["palette"], self.settings["colors"])
                     for i, (lamp, lay, light) in enumerate(lamps):
-                        level, ci = effect_frame(self.settings["effect"], beat, i, len(lamps), inten, len(cols))
-                        base = light._target()
-                        color = cols[ci] if ci is not None else None
-                        special = SPECIAL_EFFECT.get(lamp.get("preset"))
-                        vals = special(base, level, color) if special else apply_effect(lay, base, level, color)
+                        vals = self._frame(lamp, lay, light, beat, i, len(lamps), inten, cols)
                         self._device.set_channels(int(lamp["start_address"]), vals)
                         self._touched.add(lamp["id"])
                 elif self._touched:
@@ -637,6 +669,9 @@ class BeatEngine:
             "farben": self.settings["colors"],
             "rate": self.settings["rate"],
             "auto_lights": self.settings["auto_lights"],
+            "palette_all": self.settings["palette_all"],
+            "laser": self.settings["laser"],
+            "fe_da": self._has_kind("fe1500"),
             "auto_pattern": self.settings["auto_pattern"],
             "auto_every": self.settings["auto_every"],
             "auto_wechsel_wahl": AUTO_EVERY,

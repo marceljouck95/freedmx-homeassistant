@@ -955,6 +955,8 @@ class FreedmxBeatCard extends HTMLElement {
     else if (a === "auto_lights") this._set({ auto_lights: !at.auto_lights });
     else if (a === "auto_pattern") this._set({ auto_pattern: !at.auto_pattern });
     else if (a === "live_bpm") this._set({ live_bpm: !at.live_bpm });
+    else if (a === "palette_all") this._set({ palette_all: !at.palette_all });
+    else if (a === "laser") this._set({ laser: !at.laser });
     else if (a === "live_interval") this._set({ live_interval: +v });
     else if (a === "auto_every") this._set({ auto_every: +v });
     else if (a === "col-add") { const c = [...(at.farben || [])]; if (c.length < 8) this._set({ colors: [...c, "#ffffff"], palette: "eigene" }); }
@@ -995,7 +997,7 @@ class FreedmxBeatCard extends HTMLElement {
     this._anchor = { ms: a.anker_ms, beat: a.anker_beat, bpm: parseFloat(st.state), on: !!a.laeuft && !!a.enabled };
     // Regler und Farbwähler nicht neu zeichnen, solange sie bedient werden
     if (this.shadowRoot.activeElement && /INPUT|SELECT/.test(this.shadowRoot.activeElement.tagName)) return;
-    const keys = ["enabled", "source", "effect", "bars", "offset_ms", "intensity", "lampen", "lampen_wahl", "ma_player", "player_wahl", "player", "status", "bpm_quelle", "titel", "kuenstler", "manual_bpm", "laeuft", "palette", "farben", "rate", "auto_lights", "auto_pattern", "auto_every", "live_bpm", "live_status", "live_interval"];
+    const keys = ["enabled", "source", "effect", "bars", "offset_ms", "intensity", "lampen", "lampen_wahl", "ma_player", "player_wahl", "player", "status", "bpm_quelle", "titel", "kuenstler", "manual_bpm", "laeuft", "palette", "farben", "rate", "auto_lights", "auto_pattern", "auto_every", "live_bpm", "live_status", "live_interval", "palette_all", "laser", "fe_da"];
     const sig = JSON.stringify([st.state, keys.map((k) => a[k]), mu?.state, mu?.attributes?.options, c, this._err]);
     if (sig === this._sig) return;
     this._sig = sig;
@@ -1041,7 +1043,9 @@ class FreedmxBeatCard extends HTMLElement {
         ${a.palette === "eigene" ? `<div class="lbl">Eigene Farben (antippen zum Ändern)</div><div class="cols">
           ${(a.farben || []).map((x, i) => `<label title="Farbe ${i + 1}"><input type="color" data-k="col" data-i="${i}" value="${frEsc(x)}"></label>${(a.farben || []).length > 1 ? `<button class="b x" data-a="col-del" data-v="${i}" aria-label="Farbe entfernen">✕</button>` : ""}`).join("")}
           ${(a.farben || []).length < 8 ? `<button class="b x" data-a="col-add" aria-label="Farbe hinzufügen">＋</button>` : ""}</div>` : ""}
-        <div class="hint">Farbwechsel gibt es bei den Effekten „Farbwechsel“ und „Puls + Farbe“ auf Lampen mit RGB.</div>`, true);
+        <label class="chk"><button class="sw ${a.palette_all ? "on" : ""}" data-a="palette_all" aria-label="Palette bei allen Effekten"></button>Palette auch bei Puls, Blitz, Lauflicht und Wechsel (aus = eigene Lampenfarbe)</label>
+        ${a.fe_da ? `<label class="chk"><button class="sw ${a.laser ? "on" : ""}" data-a="laser" aria-label="Laser im Takt"></button>FE-1500: Laser im Takt (Rot/Grün)</label>` : ""}
+        <div class="hint">RGB-Lampen zeigen die Farbe direkt, Moving Heads (DMH-40) die nächste Farbrad-Farbe, der FE-1500 die nächste LED-Farbe.</div>`, true);
     }
     const rates = Object.entries(a.raten || {}).map(([k, n]) => [parseFloat(k), n]).sort((x, y) => x[0] - y[0]);
     let speed = `<div class="lbl">Effekt</div><div class="row">${chips(rates, "rate", a.rate)}</div>`;

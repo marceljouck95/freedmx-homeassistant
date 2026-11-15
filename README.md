@@ -83,6 +83,11 @@ Licht und Moving Heads laufen automatisch im Takt der Musik, die über Music Ass
 - **Takt:** kommt aus der Wiedergabeposition des Players. Start, Pause, Spulen und Titelwechsel werden übernommen, dazwischen läuft der Takt gleichmäßig weiter.
 - **Effekte:** Puls, Blitz, Farbwechsel, Puls + Farbe, Lauflicht, Wechsel. Sie wirken auf ausgewählte Lampen mit Dimmer oder RGB.
 - **Farben:** feste Paletten oder bis zu 8 eigene Farben.
+  Die Palette gilt (Schalter „Palette auch bei Puls, Blitz …“, Standard an) bei allen Effekten; aus = eigene Lampenfarbe. Je Lampentyp:
+  - **RGB-Lampen** (z. B. LED Bar): Farbe direkt.
+  - **Futurelight DMH-40:** nächste Farbrad-Farbe (Kanal 4), ungesättigte Farben = Weiß. Das Farbrad wechselt höchstens alle 250 ms; der Dimmer pulst im Takt.
+  - **Eurolite FE-1500:** DMX-Betriebsart, nächste LED-Farbe (Kanal 2), Puls über LEDs an/aus (kein Dimmer), Laser rot/grün passend zur Farbe im Takt (abschaltbar), Drehung leicht an.
+  DMH-40 und FE-1500 werden auch mit „Eigenem Layout“ erkannt.
 - **Geschwindigkeit:** Effekt doppelt so schnell, jeder Beat, alle 2 Beats oder jeder Takt. Ein Muster-Durchlauf der Moving Heads dauert 1–32 Beats.
 - **Automatik:** gewählte Lampen gehen mit der Musik an und nach 20 s Stille wieder aus.
 - **Feinjustage (selten nötig):** Lautsprecher-Versatz in ms, ±¼ Beat, halbes/doppeltes Tempo, „Jetzt ist 1“, Tippen als Notlösung.
