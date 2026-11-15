@@ -158,7 +158,7 @@ BEAT_BPM_SCHEMA = BEAT_BASE_SCHEMA.extend(
 )
 BEAT_SETTING_KEYS = (
     "enabled", "source", "effect", "bars", "offset_ms", "intensity", "lamps", "manual_bpm",
-    "palette", "colors", "rate", "auto_lights", "auto_pattern", "auto_every",
+    "palette", "colors", "rate", "auto_lights", "auto_pattern", "auto_every", "live_bpm",
 )
 BEAT_SETTINGS_SCHEMA = BEAT_BASE_SCHEMA.extend(
     {
@@ -176,6 +176,7 @@ BEAT_SETTINGS_SCHEMA = BEAT_BASE_SCHEMA.extend(
         vol.Optional("auto_lights"): cv.boolean,
         vol.Optional("auto_pattern"): cv.boolean,
         vol.Optional("auto_every"): vol.All(vol.Coerce(int), vol.In([0, 1, 2, 4])),
+        vol.Optional("live_bpm"): cv.boolean,
     }
 )
 

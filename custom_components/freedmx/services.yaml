@@ -301,3 +301,7 @@ beat_settings:
       selector:
         select:
           options: ["0", "1", "2", "4"]
+    live_bpm:
+      required: false
+      selector:
+        boolean:

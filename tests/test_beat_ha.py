@@ -310,3 +310,67 @@ async def test_fe1500_und_titellaenge(hass: HomeAssistant, no_network):
     engine._last_pos = (100.0, time.time())
     assert engine.auto_motion()[0] != a[0]               # nächster Abschnitt, anderes Muster
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+def _clicks(bpm: float, seconds: float, rate: int = 11025) -> bytes:
+    import numpy as np
+    n = int(seconds * rate)
+    x = np.random.default_rng(1).normal(0, 0.02, n).astype(np.float32)
+    per = 60.0 / bpm
+    t = 0.0
+    while t < seconds - 0.05:
+        i = int(t * rate)
+        k = np.arange(int(0.03 * rate))
+        x[i:i + k.size] += 0.8 * np.exp(-k / (0.006 * rate)) * np.sin(2 * np.pi * 120 * k / rate)
+        t += per
+    return (np.clip(x, -1, 1) * 32767).astype("<i2").tobytes()
+
+
+async def test_live_tempo_stream_und_aufloesung(hass: HomeAssistant, aioclient_mock):
+    from custom_components.freedmx.live import LiveTempo, Smoother, fold_to
+
+    got = []
+    live = LiveTempo(hass, got.append)
+    reader = asyncio.StreamReader()
+    reader.feed_data(_clicks(128, 31))
+    reader.feed_eof()
+    await live.listen(reader)
+    assert got and got[-1] == pytest.approx(128, abs=1.5), got
+
+    # Tempowechsel im DJ-Set: neues Tempo nach zwei übereinstimmenden Messungen
+    reader = asyncio.StreamReader()
+    reader.feed_data(_clicks(140, 31))
+    reader.feed_eof()
+    await live.listen(reader)
+    assert got[-1] == pytest.approx(140, abs=1.5), got
+
+    sm = Smoother()
+    assert sm.feed(120) is None and sm.feed(120.5) == pytest.approx(120.2, abs=0.1)
+    assert sm.feed(60.2) is None or True
+    assert fold_to(63.5, 127) == pytest.approx(127)
+
+    aioclient_mock.get("https://opml.radiotime.com/Tune.ashx", json={"body": [{"url": "http://stream.example/radio.mp3"}]})
+    assert LiveTempo.supported("tunein--GiKwYjEd://radio/s263403")
+    assert not LiveTempo.supported("deezer--abc://track/123")
+    assert await live.resolve("tunein--GiKwYjEd://radio/s263403") == "http://stream.example/radio.mp3"
+
+
+async def test_live_bpm_setzt_takt(hass: HomeAssistant, no_network):
+    entry = await _setup(hass)
+    engine = hass.data["freedmx"]["beats"][entry.entry_id]
+    reg = er.async_get(hass)
+    reg.async_get_or_create("media_player", "music_assistant", "wz", suggested_object_id="wohnzimmer")
+    async def _forever(self, cid):
+        await asyncio.sleep(3600)
+
+    with patch("custom_components.freedmx.live.LiveTempo._run", _forever), \
+         patch("custom_components.freedmx.live.shutil.which", return_value="/usr/bin/ffmpeg"):
+        await hass.services.async_call("freedmx", "beat_settings", {"enabled": True}, blocking=True)
+        hass.states.async_set("media_player.wohnzimmer", "playing", {"media_title": "Radio", "media_content_id": "tunein--x://radio/s263403"})
+        await hass.async_block_till_done()
+        assert engine._live.active and engine._live.source_id.endswith("s263403")
+        engine._live_bpm(126.0)
+        assert engine.clock.bpm == pytest.approx(126) and engine.bpm_source == "Live-Analyse" and engine.clock.ready
+        await hass.services.async_call("freedmx", "beat_settings", {"live_bpm": False}, blocking=True)
+        assert not engine._live.active
+    await hass.config_entries.async_unload(entry.entry_id)

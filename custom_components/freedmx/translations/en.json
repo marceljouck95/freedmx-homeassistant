@@ -424,6 +424,10 @@
         "auto_every": {
           "name": "Pattern change",
           "description": "Pattern change"
+        },
+        "live_bpm": {
+          "name": "Live tempo (radio)",
+          "description": "Live tempo (radio)"
         }
       }
     }

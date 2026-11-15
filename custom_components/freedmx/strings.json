@@ -424,6 +424,10 @@
         "auto_every": {
           "name": "auto_every",
           "description": "auto_every"
+        },
+        "live_bpm": {
+          "name": "live_bpm",
+          "description": "live_bpm"
         }
       }
     }

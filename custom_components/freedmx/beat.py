@@ -39,6 +39,7 @@ from .beatcore import (
     track_key,
 )
 from .const import CONF_LAMPS, DOMAIN
+from .live import LiveTempo
 from .protocol import parse_layout
 
 _LOGGER = logging.getLogger(__name__)
@@ -63,7 +64,8 @@ DEFAULTS: dict[str, Any] = {
     "rate": 1.0,          # Beats je Effektschritt (0.5 = doppelt so schnell)
     "auto_lights": False, # gewählte Lampen mit der Musik ein-/ausschalten
     "auto_pattern": True, # Bewegungsmuster wählt das System passend zum Tempo
-    "auto_every": 0,      # Musterwechsel alle n Durchläufe (0 = nach Titellänge)
+    "auto_every": 0,
+    "live_bpm": True,     # Radio-Streams selbst mithören, Tempo alle 5 s messen      # Musterwechsel alle n Durchläufe (0 = nach Titellänge)
 }
 
 
@@ -96,6 +98,7 @@ class BeatEngine:
         self._auto_slot: tuple | None = None        # (Titel, Abschnitt) der letzten Musterwahl
         self._auto_choice: tuple[str, str] | None = None
         self.runner = None                          # PatternRunner (Moving Heads), wird nach dem Start gesetzt
+        self._live = LiveTempo(hass, self._live_bpm)  # Live-Tempo aus dem Radio-Stream
 
     # ---------- Grundlagen ----------
     async def async_start(self) -> None:
@@ -111,6 +114,7 @@ class BeatEngine:
         self._ensure_task()
 
     async def async_stop(self) -> None:
+        self._live.stop()
         if self._auto_off:
             self._auto_off()
             self._auto_off = None
@@ -196,6 +200,7 @@ class BeatEngine:
         """Wiedergabe des Players auf den Takt übertragen."""
         now = time.time()
         if self.settings["source"] == MANUAL:
+            self._live.stop()
             self.player = None
             self.track = {}
             if self.clock.bpm is None:
@@ -209,6 +214,7 @@ class BeatEngine:
         self.player = pid
         st = self.hass.states.get(pid) if pid else None
         if st is None:
+            self._live.stop()
             self.clock.stop(now)
             self._auto_lights(False)
             self.track = {}
@@ -229,6 +235,8 @@ class BeatEngine:
             self.track["dur"] = float(dur) if dur else None
         except (TypeError, ValueError):
             self.track["dur"] = None
+        self._live.update(a.get("media_content_id"), st.state == "playing",
+                          bool(self.settings["enabled"] and self.settings["live_bpm"]))
         if st.state != "playing":
             self.clock.stop(now)
             self.status = "Pausiert" if st.state == "paused" else "Keine Wiedergabe"
@@ -306,6 +314,8 @@ class BeatEngine:
     def _new_track(self, key: str, artist: str, title: str, now: float) -> None:
         if self._lookup and not self._lookup.done():
             self._lookup.cancel()
+        if self._live.active and self._live.smoother.current:
+            return  # Radio mit Live-Messung: Titelwechsel ändert das gemessene Tempo nicht
         hit = self.cache.get(key) if key else None
         if hit and hit.get("bpm"):
             self.clock.set_bpm(hit["bpm"], now)
@@ -339,6 +349,16 @@ class BeatEngine:
         else:
             self.status = self._status_text()
             self._notify()
+
+    def _live_bpm(self, bpm: float) -> None:
+        """Neues, stabil gemessenes Tempo aus dem Live-Stream (Phase bleibt erhalten)."""
+        now = time.time()
+        self.clock.set_bpm(bpm, now)
+        self.bpm_source = "Live-Analyse"
+        if self.player and (st := self.hass.states.get(self.player)) and st.state == "playing":
+            self.clock.start(now)
+        self.status = self._status_text()
+        self._notify()
 
     # ---------- Bedienung ----------
     def tap(self) -> None:
@@ -432,7 +452,7 @@ class BeatEngine:
                     continue
             if k == "rate":
                 v = min((0.5, 1.0, 2.0, 4.0), key=lambda r: abs(r - float(v)))
-            if k in ("auto_lights", "auto_pattern"):
+            if k in ("auto_lights", "auto_pattern", "live_bpm"):
                 v = bool(v)
             if k == "auto_every":
                 v = min((0, 1, 2, 4), key=lambda r: abs(r - int(v)))
@@ -594,6 +614,8 @@ class BeatEngine:
             "auto_pattern": self.settings["auto_pattern"],
             "auto_every": self.settings["auto_every"],
             "auto_wechsel_wahl": AUTO_EVERY,
+            "live_bpm": self.settings["live_bpm"],
+            "live_status": self._live.status,
             "auto_muster": self._auto_choice[0] if self._auto_choice and self.auto_active() else None,
             "paletten": {k: {"name": v[0], "farben": v[1]} for k, v in PALETTES.items()},
             "raten": RATES,

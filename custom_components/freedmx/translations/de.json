@@ -424,6 +424,10 @@
         "auto_every": {
           "name": "Musterwechsel",
           "description": "Musterwechsel"
+        },
+        "live_bpm": {
+          "name": "Live-Tempo (Radio)",
+          "description": "Live-Tempo (Radio)"
         }
       }
     }
