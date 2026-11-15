@@ -1,14 +1,17 @@
 {
   "domain": "freedmx",
   "name": "Eurolite freeDMX AP",
-  "codeowners": [],
+  "codeowners": [
+    "@marceljouck95"
+  ],
   "config_flow": true,
-  "documentation": "https://github.com/",
+  "documentation": "https://github.com/marceljouck95/freedmx-homeassistant",
   "integration_type": "hub",
   "iot_class": "local_push",
   "requirements": [],
   "version": "0.16.0",
   "dependencies": [
     "http"
-  ]
+  ],
+  "issue_tracker": "https://github.com/marceljouck95/freedmx-homeassistant/issues"
 }
