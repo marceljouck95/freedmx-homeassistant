@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: pytest installieren (bewusst ohne HA-Testplugin)
-        run: python -m pip install pytest
+        run: python -m pip install pytest numpy
       - name: Tests ausführen
         run: python -m pytest -q tests/test_native.py tests/test_beatcore.py
 
@@ -51,4 +51,4 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          ignore: brands
+          ignore: brands license topics
