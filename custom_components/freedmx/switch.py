@@ -19,7 +19,7 @@ from .device import FreeDmxDevice
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback
 ) -> None:
-    add([FreeDmxLink(hass, entry, entry.runtime_data)])
+    add([FreeDmxLink(hass, entry, entry.runtime_data), BeatSwitch(entry, hass.data[DOMAIN]["beats"][entry.entry_id])])
 
 
 class FreeDmxLink(SwitchEntity, RestoreEntity):
@@ -71,6 +71,37 @@ class FreeDmxLink(SwitchEntity, RestoreEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         self._device.set_enabled(False)
         self.async_write_ha_state()
+
+    @callback
+    def _changed(self) -> None:
+        self.async_write_ha_state()
+
+
+class BeatSwitch(SwitchEntity):
+    """Beat-Sync an/aus (Einstellung wird von der Beat-Steuerung gespeichert)."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Beat-Sync"
+    _attr_should_poll = False
+    _attr_icon = "mdi:music-note"
+
+    def __init__(self, entry: ConfigEntry, engine) -> None:
+        self._engine = engine
+        self._attr_unique_id = f"{entry.entry_id}_beat_sync"
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry.entry_id)})
+
+    @property
+    def is_on(self) -> bool:
+        return bool(self._engine.settings["enabled"])
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        self._engine.update(enabled=True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        self._engine.update(enabled=False)
+
+    async def async_added_to_hass(self) -> None:
+        self.async_on_remove(self._engine.add_listener(self._changed))
 
     @callback
     def _changed(self) -> None:

@@ -74,3 +74,21 @@ und den Sender gegen ein simuliertes freeDMX (ohne Home Assistant).
 - **Jeder Wert einzeln:** In der Kanäle-Karte wählt man die Funktion und daneben jeden einzelnen Wert innerhalb der Funktion (zusätzlich Zahl, −/+ und Regler für 0–255).
 - **Gruppe:** Taste „Gruppe“ in der Kanäle-Karte – Einstellungen und Ein/Aus gelten für alle gleichen Lampen (oder die im Editor gewählten).
 - **Speicherplätze:** Position, Farbe und alle Kanäle unter einem Namen sichern, abrufen und löschen (für eine Lampe, die Gruppe oder alle Lampen). Dienst `freedmx.save_scene` mit optionalem `lamp_ids`.
+
+## Neu in 0.9.0: Beat-Sync mit Music Assistant
+
+Licht und Moving Heads laufen automatisch im Takt der Musik, die über Music Assistant spielt. Tippen ist nicht nötig.
+
+- **Tempo:** zum laufenden Titel automatisch über die freie Deezer-API. Hat Deezer kein Tempo, misst die Integration es selbst aus der 30-Sekunden-Hörprobe (ffmpeg + numpy, beides in Home Assistant enthalten). Jedes Tempo wird je Titel gespeichert.
+- **Takt:** kommt aus der Wiedergabeposition des Players. Start, Pause, Spulen und Titelwechsel werden übernommen, dazwischen läuft der Takt gleichmäßig weiter.
+- **Effekte:** Puls, Blitz, Farbwechsel, Puls + Farbe, Lauflicht, Wechsel. Sie wirken auf ausgewählte Lampen mit Dimmer oder RGB.
+- **Farben:** feste Paletten oder bis zu 8 eigene Farben.
+- **Geschwindigkeit:** Effekt doppelt so schnell, jeder Beat, alle 2 Beats oder jeder Takt. Ein Muster-Durchlauf der Moving Heads dauert 1–32 Beats.
+- **Automatik:** gewählte Lampen gehen mit der Musik an und nach 20 s Stille wieder aus.
+- **Feinjustage (selten nötig):** Lautsprecher-Versatz in ms, ±¼ Beat, halbes/doppeltes Tempo, „Jetzt ist 1“, Tippen als Notlösung.
+
+Neue Entitäten: `sensor.…_beat_tempo` (BPM, alle Infos als Attribute), `switch.…_beat_sync`, `select.…_beat_effekt`, `select.…_beat_quelle`, `button.…_beat_tippen`, `button.…_beat_ausrichten`.
+Neue Dienste: `freedmx.beat_settings`, `freedmx.beat_bpm`, `freedmx.beat_align`, `freedmx.beat_tap`.
+Neue Karte: `custom:freedmx-beat-card` (in derselben Datei wie die Raum-Karte, Einstellungen im Karten-Editor).
+
+**Grenzen:** Der Takt wird aus Tempo und Wiedergabeposition berechnet, nicht aus dem Ton selbst. Bei Titeln mit langem Intro ohne Schlag oder mit wechselndem Tempo kann er leicht danebenliegen. Dafür gibt es ±¼ Beat; die Korrektur wird je Titel gemerkt. Die Sendeschleife arbeitet mit 25 Bildern/s, Effekte sind also auf ±20 ms genau.

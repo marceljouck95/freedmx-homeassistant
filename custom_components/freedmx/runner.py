@@ -30,6 +30,7 @@ class PatternRunner:
         self.tempo = 40.0   # 1…100
         self.size = 70.0    # 10…100 %
         self._phase = 0.0
+        self.beat = None  # BeatEngine (Takt aus Music Assistant), wird nach dem Start gesetzt
         self._task: asyncio.Task | None = None
         self._listeners: list[Callable[[], None]] = []
 
@@ -73,7 +74,11 @@ class PatternRunner:
     async def _run(self) -> None:
         bounds = self._room.bounds()
         while self.pattern != OFF:
-            self._phase = (self._phase + STEP / self._period()) % 1.0
+            synced = self.beat.motion_phase() if self.beat is not None else None
+            if synced is not None:
+                self._phase = synced  # Muster im Takt: ein Durchlauf = eingestellte Anzahl Beats
+            else:
+                self._phase = (self._phase + STEP / self._period()) % 1.0
             active = [l for l in self._lamps if self._lamp_on(l)]
             for i, lamp in enumerate(active):
                 u, v = point(self.pattern, self._phase, i, len(active), self.mode)

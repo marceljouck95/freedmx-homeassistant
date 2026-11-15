@@ -16,7 +16,7 @@
  * /local/freedmx-raum-card.js (JavaScript-Modul) eintragen.
  */
 
-const FR_VERSION = "1.5.0";
+const FR_VERSION = "1.6.0";
 const frEd = (sr, k) => { try { if (window.EinheitDesign) window.EinheitDesign.adopt(sr, k); else (window.__edQ = window.__edQ || []).push([sr, k]); } catch (e) { /* Design-Zentrale optional */ } };
 
 const FR_DEFAULTS = {
@@ -834,4 +834,255 @@ if (!customElements.get("freedmx-kanaele-card")) {
   window.customCards = window.customCards || [];
   window.customCards.push({ type: "freedmx-kanaele-card", name: "freeDMX Kanäle", description: "Alle DMX-Kanäle einer Lampe: jeder Wert einzeln, Gruppe, Speicherplätze", preview: false });
   window.customCards.push({ type: "freedmx-verbindung-card", name: "freeDMX Verbindung", description: "Verbinden/Trennen (auch automatisch beim Öffnen/Verlassen) und Speicherplätze", preview: false });
+}
+
+
+/* =====================================================================
+ * freeDMX Beat – Licht und Bewegung im Takt der Musik (Music Assistant)
+ * type: custom:freedmx-beat-card
+ * Vollautomatisch: Tempo zum laufenden Titel (Deezer bzw. eigene Audio-Analyse),
+ * Takt aus der Wiedergabeposition. Einstellbar: Effekt, Farben, Geschwindigkeit, Lampen.
+ * ===================================================================== */
+const FB_DEFAULTS = { title: "Beat-Sync", entity: "", show_motion: true, show_colors: true, show_lamps: true, show_fine: true, compact: false };
+const FB_STORE = "freedmx-beat-card";
+const fbLs = { get() { try { return JSON.parse(localStorage.getItem(FB_STORE) || "{}"); } catch (e) { return {}; } },
+  set(o) { try { localStorage.setItem(FB_STORE, JSON.stringify({ ...fbLs.get(), ...o })); } catch (e) { /* */ } } };
+
+class FreedmxBeatCard extends HTMLElement {
+  static getConfigElement() { return document.createElement("freedmx-beat-card-editor"); }
+  static getStubConfig() { return { ...FB_DEFAULTS }; }
+  setConfig(config) {
+    this.__rawCfg = config;
+    this._config = { ...FB_DEFAULTS, ...(config || {}) };
+    this._open = fbLs.get().open || {};
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: "open" });
+      frEd(this.shadowRoot, "freedmx");
+      this.shadowRoot.innerHTML = `<style>
+        :host { display:block; height:100%;
+          --primary-text-color:var(--ed-text,#e8eef6);--secondary-text-color:var(--ed-sub,#8c9bb0);
+          --ha-card-background:var(--ed-bg,linear-gradient(160deg,#0f1d2e,#0a1420));--ha-card-border-radius:var(--ed-radius,22px);
+          color:var(--ed-text,#e8eef6); --acc:var(--ed-cool,#3fc1ff); }
+        ha-card { height:100%; box-sizing:border-box; padding:14px; display:flex; flex-direction:column; gap:12px; overflow:auto; backdrop-filter:var(--ed-blur,none);-webkit-backdrop-filter:var(--ed-blur,none); }
+        .head { display:flex; align-items:center; gap:10px; }
+        .title { font-size:1.05rem; font-weight:600; flex:1; min-width:0; }
+        .sw { position:relative; width:46px; height:26px; flex:none; border-radius:13px; background:var(--ed-tile2,rgba(255,255,255,.14)); border:0; cursor:pointer; padding:0; }
+        .sw::after { content:""; position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:#fff; transition:transform .2s; }
+        .sw.on { background:var(--acc); } .sw.on::after { transform:translateX(20px); }
+        .top { display:flex; align-items:center; gap:14px; }
+        .bpm { display:flex; flex-direction:column; min-width:96px; }
+        .bpm b { font-size:2.2rem; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; }
+        .bpm small { font-size:.75rem; color:var(--secondary-text-color); margin-top:3px; }
+        .dots { display:flex; gap:8px; flex:1; justify-content:flex-end; }
+        .dots i { width:16px; height:16px; border-radius:50%; background:var(--ed-tile2,rgba(255,255,255,.14)); transition:background .06s, transform .06s; }
+        .dots i.on { background:var(--acc); transform:scale(1.35); }
+        .dots i.one.on { background:#ffc83d; }
+        .info { font-size:.82rem; color:var(--secondary-text-color); line-height:1.35; }
+        .info .t { color:var(--primary-text-color); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+        .lbl { font-size:.75rem; color:var(--secondary-text-color); width:100%; margin-top:2px; }
+        .b { display:inline-flex; align-items:center; justify-content:center; gap:6px; border:1px solid var(--ed-line,rgba(255,255,255,.12)); background:var(--ed-tile,rgba(255,255,255,.045)); color:inherit; border-radius:999px; padding:7px 13px; font:inherit; font-size:.85rem; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+        .b.on { border-color:var(--acc); background:color-mix(in srgb, var(--acc) 22%, transparent); }
+        .b:disabled { opacity:.4; cursor:default; }
+        .sw8 { display:inline-flex; gap:2px; } .sw8 i { width:10px; height:10px; border-radius:3px; display:inline-block; }
+        .cols { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+        .cols label { position:relative; width:36px; height:36px; border-radius:10px; overflow:hidden; border:1px solid var(--ed-line,rgba(255,255,255,.2)); cursor:pointer; }
+        .cols input[type=color] { position:absolute; inset:-6px; width:48px; height:48px; border:0; padding:0; cursor:pointer; background:none; }
+        .cols .x { width:36px; height:36px; padding:0; }
+        select, input[type=number] { font:inherit; font-size:.85rem; color:inherit; background:var(--ed-tile,rgba(255,255,255,.06)); border:1px solid var(--ed-line,rgba(255,255,255,.12)); border-radius:10px; padding:7px 10px; }
+        select { flex:1; min-width:0; } select option { color:#000; }
+        input[type=number] { width:90px; }
+        .sl { display:flex; align-items:center; gap:10px; width:100%; }
+        .sl input { flex:1; accent-color:var(--acc); }
+        .sl span { min-width:62px; text-align:right; font-size:.82rem; font-variant-numeric:tabular-nums; }
+        .chk { display:flex; align-items:center; gap:10px; font-size:.85rem; cursor:pointer; }
+        details { border-top:1px solid var(--ed-line,rgba(255,255,255,.08)); padding-top:8px; }
+        summary { cursor:pointer; font-size:.88rem; font-weight:600; list-style:none; display:flex; align-items:center; gap:6px; }
+        summary::-webkit-details-marker { display:none; }
+        summary::before { content:"›"; display:inline-block; transition:transform .2s; font-size:1.1rem; }
+        details[open] summary::before { transform:rotate(90deg); }
+        .sec { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+        .hint { font-size:.75rem; color:var(--secondary-text-color); }
+        .err { font-size:.8rem; color:#ff8a8a; }
+        .tap { touch-action:manipulation; user-select:none; -webkit-user-select:none; }
+        .tap.hit { background:var(--acc); color:#000; }
+        :host([compact]) .bpm b { font-size:1.7rem; }
+      </style><ha-card></ha-card>`;
+      const sr = this.shadowRoot;
+      this.$card = sr.querySelector("ha-card");
+      sr.addEventListener("pointerdown", (ev) => { const t = ev.target.closest(".tap"); if (t) { ev.preventDefault(); t.classList.add("hit"); setTimeout(() => t.classList.remove("hit"), 110); this._call("beat_tap", {}); } });
+      sr.addEventListener("click", (ev) => this._click(ev));
+      sr.addEventListener("change", (ev) => this._change(ev));
+      sr.addEventListener("input", (ev) => { const t = ev.target; if (t.type === "range") { const s = t.parentElement.querySelector("span"); if (s) s.textContent = this._fmtSl(t.dataset.k, +t.value); } });
+      sr.addEventListener("toggle", (ev) => { const d = ev.target; if (d.tagName === "DETAILS" && d.dataset.sec) { this._open[d.dataset.sec] = d.open; fbLs.set({ open: this._open }); } }, true);
+    }
+    this.toggleAttribute("compact", !!this._config.compact);
+    this._sig = null;
+    if (this._hass) this._render();
+  }
+  set hass(h) { this._hass = h; this._render(); }
+  connectedCallback() { this._loop(); }
+  disconnectedCallback() { cancelAnimationFrame(this._raf); this._raf = null; }
+  getCardSize() { return 6; }
+  getGridOptions() { return { columns: 12, min_columns: 4, rows: "auto", min_rows: 2 }; }
+
+  _ent() {
+    const h = this._hass, c = this._config;
+    if (c.entity && h.states[c.entity]) return c.entity;
+    return Object.keys(h.states).find((k) => k.startsWith("sensor.") && h.states[k].attributes?.freedmx_beat) || null;
+  }
+  _call(svc, data) {
+    const a = this._st?.attributes || {};
+    return this._hass.callService("freedmx", svc, { ...(a.config_entry_id ? { config_entry_id: a.config_entry_id } : {}), ...data })
+      .then(() => { if (this._err) { this._err = ""; this._sig = null; this._render(); } })
+      .catch((e) => { this._err = `Fehler: ${e.message || e}`; this._sig = null; this._render(); });
+  }
+  _set(data) { return this._call("beat_settings", data); }
+  _fmtSl(k, v) { return k === "offset_ms" ? `${v > 0 ? "+" : ""}${v} ms` : `${v} %`; }
+
+  _click(ev) {
+    const b = ev.target.closest("[data-a]"); if (!b || b.disabled) return;
+    const a = b.dataset.a, v = b.dataset.v, at = this._st?.attributes || {};
+    if (a === "enabled") this._set({ enabled: !at.enabled });
+    else if (a === "align") this._call("beat_align", { eins: true });
+    else if (a === "nudge") this._call("beat_align", { beats: +v });
+    else if (a === "faktor") this._call("beat_bpm", { faktor: +v });
+    else if (a === "bars") this._set({ bars: +v });
+    else if (a === "rate") this._set({ rate: +v });
+    else if (a === "effect") this._set({ effect: v });
+    else if (a === "palette") this._set({ palette: v });
+    else if (a === "auto_lights") this._set({ auto_lights: !at.auto_lights });
+    else if (a === "col-add") { const c = [...(at.farben || [])]; if (c.length < 8) this._set({ colors: [...c, "#ffffff"], palette: "eigene" }); }
+    else if (a === "col-del") { const c = [...(at.farben || [])]; if (c.length > 1) { c.splice(+v, 1); this._set({ colors: c }); } }
+    else if (a === "lamp") {
+      const all = (at.lampen_wahl || []).map((l) => l.id);
+      let cur = Array.isArray(at.lampen) ? [...at.lampen] : [...all];
+      cur = cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v];
+      this._set({ lamps: cur.length === all.length ? "alle" : cur });
+    } else if (a === "lamps-all") this._set({ lamps: "alle" });
+    else if (a === "pattern") { const e = at.entitaeten?.muster; if (e) this._hass.callService("select", "select_option", { entity_id: e, option: v }); }
+  }
+  _change(ev) {
+    const t = ev.target, k = t.dataset.k; if (!k) return;
+    const at = this._st?.attributes || {};
+    if (k === "source") this._set({ source: t.value });
+    else if (k === "manual_bpm") { const n = parseFloat(String(t.value).replace(",", ".")); if (n >= 20 && n <= 480) this._call("beat_bpm", { bpm: n }); }
+    else if (k === "offset_ms" || k === "intensity") this._set({ [k]: +t.value });
+    else if (k === "col") { const c = [...(at.farben || [])]; c[+t.dataset.i] = t.value; this._set({ colors: c, palette: "eigene" }); }
+  }
+
+  _render() {
+    if (!this._hass || !this._config || !this.$card) return;
+    const id = this._ent();
+    this._st = id ? this._hass.states[id] : null;
+    const st = this._st, c = this._config;
+    if (!st) { this.$card.innerHTML = `<div class="title">${frEsc(c.title)}</div><div class="hint">Kein Beat-Sensor gefunden – freeDMX-Integration ab Version 0.9.0 nötig.</div>`; return; }
+    const a = st.attributes, mu = a.entitaeten?.muster ? this._hass.states[a.entitaeten.muster] : null;
+    this._anchor = { ms: a.anker_ms, beat: a.anker_beat, bpm: parseFloat(st.state), on: !!a.laeuft && !!a.enabled };
+    // Regler und Farbwähler nicht neu zeichnen, solange sie bedient werden
+    if (this.shadowRoot.activeElement && /INPUT|SELECT/.test(this.shadowRoot.activeElement.tagName)) return;
+    const keys = ["enabled", "source", "effect", "bars", "offset_ms", "intensity", "lampen", "lampen_wahl", "ma_player", "status", "bpm_quelle", "titel", "kuenstler", "manual_bpm", "laeuft", "palette", "farben", "rate", "auto_lights"];
+    const sig = JSON.stringify([st.state, keys.map((k) => a[k]), mu?.state, mu?.attributes?.options, c, this._err]);
+    if (sig === this._sig) return;
+    this._sig = sig;
+    const bpm = parseFloat(st.state);
+    const manual = a.source === "manuell";
+    const src = [["auto", "Automatisch (Music Assistant)"], ...(a.ma_player || []).map((p) => [p.entity_id, p.name]), ["manuell", "Manuell (festes Tempo)"]];
+    if (!src.some(([v]) => v === a.source)) src.splice(1, 0, [a.source, a.source]);
+    const opt = (list, cur) => list.map(([v, n]) => `<option value="${frEsc(v)}"${v === cur ? " selected" : ""}>${frEsc(n)}</option>`).join("");
+    const sec = (key, title, body, def) => `<details data-sec="${key}"${(this._open[key] ?? def) ? " open" : ""}><summary>${title}</summary><div class="sec">${body}</div></details>`;
+    const chips = (list, act, cur) => list.map(([v, n]) => `<button class="b ${String(v) === String(cur) ? "on" : ""}" data-a="${act}" data-v="${frEsc(v)}">${n}</button>`).join("");
+    const lamps = a.lampen_wahl || [], sel = Array.isArray(a.lampen) ? a.lampen : lamps.map((l) => l.id);
+    const track = a.titel ? `<div class="t">${frEsc(a.kuenstler ? a.kuenstler + " – " : "")}${frEsc(a.titel)}</div>` : "";
+    const sw8 = (cols) => `<span class="sw8">${cols.slice(0, 8).map((x) => `<i style="background:${frEsc(x)}"></i>`).join("")}</span>`;
+
+    let h = `<div class="head"><div class="title">${frEsc(c.title)}</div><button class="sw ${a.enabled ? "on" : ""}" data-a="enabled" aria-label="Beat-Sync ${a.enabled ? "aus" : "ein"}schalten"></button></div>
+      <div class="top">
+        <div class="bpm"><b>${isNaN(bpm) ? "–" : bpm.toLocaleString("de-DE", { maximumFractionDigits: 1 })}</b><small>BPM${a.bpm_quelle ? " · " + frEsc(a.bpm_quelle) : ""}</small></div>
+        <div class="dots">${[0, 1, 2, 3].map((i) => `<i class="${i === 0 ? "one" : ""}"></i>`).join("")}</div>
+      </div>
+      <div class="info">${track}<div>${frEsc(a.enabled ? a.status || "" : "Aus – einschalten, dann läuft alles automatisch mit der Musik")}</div></div>`;
+    if (this._err) h += `<div class="err">${frEsc(this._err)}</div>`;
+    h += sec("fx", "Effekt", `
+      <div class="row">${chips(Object.entries(a.effekte || {}), "effect", a.effect)}</div>
+      <div class="lbl">Stärke (wie weit zwischen den Schlägen abgedunkelt wird)</div>
+      <div class="sl"><input type="range" min="0" max="100" step="5" data-k="intensity" value="${a.intensity}"><span>${this._fmtSl("intensity", a.intensity)}</span></div>`, true);
+    if (c.show_colors) {
+      const pals = Object.entries(a.paletten || {}).map(([k, p]) => [k, `${sw8(p.farben)} ${frEsc(p.name)}`]);
+      pals.push(["eigene", `${sw8(a.farben || [])} Eigene`]);
+      h += sec("colors", "Farben", `
+        <div class="row">${chips(pals, "palette", a.palette)}</div>
+        ${a.palette === "eigene" ? `<div class="lbl">Eigene Farben (antippen zum Ändern)</div><div class="cols">
+          ${(a.farben || []).map((x, i) => `<label title="Farbe ${i + 1}"><input type="color" data-k="col" data-i="${i}" value="${frEsc(x)}"></label>${(a.farben || []).length > 1 ? `<button class="b x" data-a="col-del" data-v="${i}" aria-label="Farbe entfernen">✕</button>` : ""}`).join("")}
+          ${(a.farben || []).length < 8 ? `<button class="b x" data-a="col-add" aria-label="Farbe hinzufügen">＋</button>` : ""}</div>` : ""}
+        <div class="hint">Farbwechsel gibt es bei den Effekten „Farbwechsel“ und „Puls + Farbe“ auf Lampen mit RGB.</div>`, true);
+    }
+    const rates = Object.entries(a.raten || {}).map(([k, n]) => [parseFloat(k), n]).sort((x, y) => x[0] - y[0]);
+    let speed = `<div class="lbl">Effekt</div><div class="row">${chips(rates, "rate", a.rate)}</div>`;
+    if (c.show_motion) {
+      speed += `<div class="lbl">Moving Heads: ein Muster-Durchlauf dauert</div>
+        <div class="row">${chips((a.takte_wahl || [1, 2, 4, 8, 16, 32]).map((n) => [n, `${n} ${n === 1 ? "Beat" : "Beats"}`]), "bars", a.bars)}</div>
+        ${mu ? `<div class="lbl">Bewegungsmuster</div><div class="row">${chips((mu.attributes.options || []).map((p) => [p, frEsc(p)]), "pattern", mu.state)}</div>` : ""}`;
+    }
+    h += sec("speed", "Geschwindigkeit", speed, true);
+    if (c.show_lamps && lamps.length) {
+      h += sec("lamps", "Lampen", `<div class="row">
+          <button class="b ${!Array.isArray(a.lampen) ? "on" : ""}" data-a="lamps-all">Alle</button>
+          ${lamps.map((l) => `<button class="b ${sel.includes(l.id) ? "on" : ""}" data-a="lamp" data-v="${frEsc(l.id)}">${frEsc(l.name)}</button>`).join("")}</div>
+        <label class="chk"><button class="sw ${a.auto_lights ? "on" : ""}" data-a="auto_lights" aria-label="Lampen mit der Musik schalten"></button>Lampen mit der Musik ein- und ausschalten</label>
+        <div class="hint">Der Effekt läuft auf den gewählten Lampen, sobald Musik spielt. Bei Pause steht er, nach 20 s Stille gehen automatisch eingeschaltete Lampen wieder aus.</div>`, true);
+    }
+    if (c.show_fine) {
+      h += sec("fine", "Quelle und Feinjustage", `
+        <div class="row"><select data-k="source" aria-label="Taktquelle">${opt(src, a.source)}</select>
+          ${manual ? `<input type="number" data-k="manual_bpm" min="20" max="480" step="0.1" value="${frEsc(a.manual_bpm)}" aria-label="BPM">` : ""}</div>
+        <div class="lbl">Versatz Lautsprecher (Licht später = +)</div>
+        <div class="sl"><input type="range" min="-500" max="500" step="10" data-k="offset_ms" value="${a.offset_ms}"><span>${this._fmtSl("offset_ms", a.offset_ms)}</span></div>
+        <div class="row"><button class="b" data-a="nudge" data-v="-0.25">−¼ Beat</button><button class="b" data-a="nudge" data-v="0.25">+¼ Beat</button>
+          <button class="b" data-a="faktor" data-v="0.5" ${isNaN(bpm) ? "disabled" : ""}>Halbes Tempo</button><button class="b" data-a="faktor" data-v="2" ${isNaN(bpm) ? "disabled" : ""}>Doppeltes Tempo</button></div>
+        <div class="row"><button class="b" data-a="align">Jetzt ist „1“</button><button class="b tap">Im Takt tippen</button></div>
+        <div class="hint">Normalerweise nicht nötig. Den Versatz einmal so einstellen, dass das Licht genau mit dem Schlag kommt. Korrekturen werden je Titel gemerkt.</div>`, false);
+    }
+    this.$card.innerHTML = h;
+    this.$dots = [...this.$card.querySelectorAll(".dots i")];
+    this._last = -2;
+    this._loop();
+  }
+  _loop() {
+    if (this._raf || !this.isConnected) return;
+    const step = () => {
+      this._raf = null;
+      if (!this.isConnected) return;
+      const an = this._anchor;
+      if (this.$dots && this.$dots.length) {
+        let idx = -1;
+        if (an && an.on && an.ms != null && !isNaN(an.bpm)) {
+          const beat = an.beat + (Date.now() - an.ms) / 60000 * an.bpm;
+          idx = beat - Math.floor(beat) < 0.22 ? ((Math.floor(beat) % 4) + 4) % 4 : -1;
+        }
+        if (idx !== this._last) { this._last = idx; this.$dots.forEach((d, i) => d.classList.toggle("on", i === idx)); }
+      }
+      this._raf = requestAnimationFrame(step);
+    };
+    this._raf = requestAnimationFrame(step);
+  }
+}
+
+const FB_SCHEMA = [
+  { name: "title", label: "Titel", selector: { text: {} } },
+  { name: "entity", label: "Beat-Sensor (leer = automatisch)", selector: { entity: { domain: "sensor", integration: "freedmx" } } },
+  { type: "grid", name: "", schema: [
+    { name: "show_colors", label: "Farben", selector: { boolean: {} } },
+    { name: "show_motion", label: "Moving-Head-Bewegung", selector: { boolean: {} } },
+    { name: "show_lamps", label: "Lampenauswahl", selector: { boolean: {} } },
+    { name: "show_fine", label: "Quelle und Feinjustage", selector: { boolean: {} } },
+    { name: "compact", label: "Kompakt", selector: { boolean: {} } },
+  ] },
+];
+
+if (!customElements.get("freedmx-beat-card")) {
+  customElements.define("freedmx-beat-card", FreedmxBeatCard);
+  customElements.define("freedmx-beat-card-editor", fdEditor(FB_SCHEMA, FB_DEFAULTS));
+  window.customCards = window.customCards || [];
+  window.customCards.push({ type: "freedmx-beat-card", name: "freeDMX Beat", description: "Licht und Moving Heads automatisch im Takt der Musik (Music Assistant): Effekte, Farben, Geschwindigkeit, Lampen", preview: false });
 }

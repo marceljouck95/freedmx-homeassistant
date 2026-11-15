@@ -314,6 +314,110 @@
           "description": "0–255. Empty = back to default."
         }
       }
+    },
+    "beat_tap": {
+      "name": "Tap beat",
+      "description": "Tap along: 3+ taps set the tempo, every tap aligns the beat.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Gerät",
+          "description": "freeDMX-Gerät"
+        }
+      }
+    },
+    "beat_align": {
+      "name": "Align beat",
+      "description": "Now is a beat (or shift by beats).",
+      "fields": {
+        "config_entry_id": {
+          "name": "Gerät",
+          "description": "freeDMX-Gerät"
+        },
+        "beats": {
+          "name": "Beats",
+          "description": "Verschieben um Beats (z. B. 0.25)"
+        },
+        "eins": {
+          "name": "Taktanfang",
+          "description": "Jetzt ist die „1“ eines 4/4-Takts"
+        }
+      }
+    },
+    "beat_bpm": {
+      "name": "Set beat tempo",
+      "description": "Set, halve or double the tempo.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Gerät",
+          "description": "freeDMX-Gerät"
+        },
+        "bpm": {
+          "name": "BPM",
+          "description": "Tempo"
+        },
+        "faktor": {
+          "name": "Faktor",
+          "description": "0.5 = halb, 2 = doppelt"
+        }
+      }
+    },
+    "beat_settings": {
+      "name": "Beat settings",
+      "description": "Configure beat sync.",
+      "fields": {
+        "config_entry_id": {
+          "name": "config_entry_id",
+          "description": "config_entry_id"
+        },
+        "enabled": {
+          "name": "enabled",
+          "description": "enabled"
+        },
+        "source": {
+          "name": "source",
+          "description": "source"
+        },
+        "effect": {
+          "name": "effect",
+          "description": "effect"
+        },
+        "bars": {
+          "name": "bars",
+          "description": "bars"
+        },
+        "offset_ms": {
+          "name": "offset_ms",
+          "description": "offset_ms"
+        },
+        "intensity": {
+          "name": "intensity",
+          "description": "intensity"
+        },
+        "lamps": {
+          "name": "lamps",
+          "description": "lamps"
+        },
+        "manual_bpm": {
+          "name": "manual_bpm",
+          "description": "manual_bpm"
+        },
+        "palette": {
+          "name": "palette",
+          "description": "palette"
+        },
+        "colors": {
+          "name": "colors",
+          "description": "colors"
+        },
+        "rate": {
+          "name": "rate",
+          "description": "rate"
+        },
+        "auto_lights": {
+          "name": "auto_lights",
+          "description": "auto_lights"
+        }
+      }
     }
   },
   "entity": {

@@ -76,9 +76,11 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [
     Platform.BINARY_SENSOR,
+    Platform.BUTTON,
     Platform.LIGHT,
     Platform.NUMBER,
     Platform.SELECT,
+    Platform.SENSOR,
     Platform.SWITCH,
 ]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -137,6 +139,41 @@ LAMP_CHANNEL_SCHEMA = vol.Schema(
         vol.Required(ATTR_LAMP_ID): cv.string,
         vol.Required(ATTR_KANAL): vol.All(vol.Coerce(int), vol.Range(min=1, max=512)),
         vol.Optional(ATTR_WERT): vol.Any(None, vol.All(vol.Coerce(int), vol.Range(min=0, max=255))),
+    }
+)
+
+
+BEAT_BASE_SCHEMA = vol.Schema({vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string})
+BEAT_ALIGN_SCHEMA = BEAT_BASE_SCHEMA.extend(
+    {
+        vol.Optional("beats"): vol.All(vol.Coerce(float), vol.Range(min=-4, max=4)),
+        vol.Optional("eins"): cv.boolean,
+    }
+)
+BEAT_BPM_SCHEMA = BEAT_BASE_SCHEMA.extend(
+    {
+        vol.Optional("bpm"): vol.All(vol.Coerce(float), vol.Range(min=20, max=480)),
+        vol.Optional("faktor"): vol.All(vol.Coerce(float), vol.In([0.5, 2.0])),
+    }
+)
+BEAT_SETTING_KEYS = (
+    "enabled", "source", "effect", "bars", "offset_ms", "intensity", "lamps", "manual_bpm",
+    "palette", "colors", "rate", "auto_lights",
+)
+BEAT_SETTINGS_SCHEMA = BEAT_BASE_SCHEMA.extend(
+    {
+        vol.Optional("enabled"): cv.boolean,
+        vol.Optional("source"): cv.string,
+        vol.Optional("effect"): cv.string,
+        vol.Optional("bars"): vol.All(vol.Coerce(int), vol.Range(min=1, max=32)),
+        vol.Optional("offset_ms"): vol.All(vol.Coerce(int), vol.Range(min=-1000, max=1000)),
+        vol.Optional("intensity"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
+        vol.Optional("lamps"): vol.Any("alle", vol.All(cv.ensure_list, [cv.string])),
+        vol.Optional("manual_bpm"): vol.All(vol.Coerce(float), vol.Range(min=20, max=480)),
+        vol.Optional("palette"): cv.string,
+        vol.Optional("colors"): vol.All(cv.ensure_list, [cv.string]),
+        vol.Optional("rate"): vol.All(vol.Coerce(float), vol.In([0.5, 1.0, 2.0, 4.0])),
+        vol.Optional("auto_lights"): cv.boolean,
     }
 )
 
@@ -366,6 +403,39 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         except ValueError as err:
             raise ServiceValidationError(str(err)) from err
 
+    def _engine(call: ServiceCall):
+        entry = _target_entry(hass, call.data.get(ATTR_CONFIG_ENTRY_ID))
+        engine = hass.data.get(DOMAIN, {}).get("beats", {}).get(entry.entry_id)
+        if engine is None:
+            raise ServiceValidationError("Beat-Sync ist nicht bereit.")
+        return engine
+
+    async def handle_beat_tap(call: ServiceCall) -> None:
+        _engine(call).tap()
+
+    async def handle_beat_align(call: ServiceCall) -> None:
+        engine = _engine(call)
+        if call.data.get("beats"):
+            engine.nudge(float(call.data["beats"]))
+        else:
+            engine.align(bool(call.data.get("eins")))
+
+    async def handle_beat_bpm(call: ServiceCall) -> None:
+        engine = _engine(call)
+        if not call.data.get("bpm") and not call.data.get("faktor"):
+            raise ServiceValidationError("bpm oder faktor angeben.")
+        engine.set_bpm(call.data.get("bpm"), call.data.get("faktor"))
+
+    async def handle_beat_settings(call: ServiceCall) -> None:
+        engine = _engine(call)
+        data = {k: call.data[k] for k in BEAT_SETTING_KEYS if k in call.data}
+        engine.update(**data)
+
+    hass.services.async_register(DOMAIN, "beat_tap", handle_beat_tap, schema=BEAT_BASE_SCHEMA)
+    hass.services.async_register(DOMAIN, "beat_align", handle_beat_align, schema=BEAT_ALIGN_SCHEMA)
+    hass.services.async_register(DOMAIN, "beat_bpm", handle_beat_bpm, schema=BEAT_BPM_SCHEMA)
+    hass.services.async_register(DOMAIN, "beat_settings", handle_beat_settings, schema=BEAT_SETTINGS_SCHEMA)
+
     hass.services.async_register(
         DOMAIN, SERVICE_SET_LAMP_CHANNEL, handle_lamp_channel, schema=LAMP_CHANNEL_SCHEMA
     )
@@ -428,12 +498,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         configuration_url=f"http://{host}",
     )
 
+    from .beat import BeatEngine
     from .runner import PatternRunner
 
-    hass.data.setdefault(DOMAIN, {}).setdefault("runners", {})[entry.entry_id] = PatternRunner(
-        hass, device, conf.get(CONF_LAMPS, []), room_data
-    )
+    runner = PatternRunner(hass, device, conf.get(CONF_LAMPS, []), room_data)
+    hass.data.setdefault(DOMAIN, {}).setdefault("runners", {})[entry.entry_id] = runner
+    engine = BeatEngine(hass, entry, device, conf)
+    hass.data[DOMAIN].setdefault("beats", {})[entry.entry_id] = engine
+    runner.beat = engine
+    await engine.async_start()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    engine.notify()  # Beat-Sensor kennt jetzt alle Entitäten (Muster, Tempo …)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
 
@@ -453,6 +528,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         runner = hass.data.get(DOMAIN, {}).get("runners", {}).pop(entry.entry_id, None)
         if runner:
             runner.stop()
+        engine = hass.data.get(DOMAIN, {}).get("beats", {}).pop(entry.entry_id, None)
+        if engine:
+            await engine.async_stop()
         await entry.runtime_data.async_stop()
     return unloaded
 

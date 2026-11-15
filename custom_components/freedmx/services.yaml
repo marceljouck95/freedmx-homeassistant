@@ -166,3 +166,129 @@ set_lamp_channel:
           min: 0
           max: 255
           mode: slider
+
+beat_tap:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: freedmx
+
+beat_align:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: freedmx
+    beats:
+      required: false
+      example: 0.25
+      selector:
+        number:
+          min: -4
+          max: 4
+          step: 0.05
+          mode: box
+    eins:
+      required: false
+      selector:
+        boolean:
+
+beat_bpm:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: freedmx
+    bpm:
+      required: false
+      example: 128
+      selector:
+        number:
+          min: 20
+          max: 480
+          step: 0.1
+          mode: box
+    faktor:
+      required: false
+      selector:
+        select:
+          options:
+            - "0.5"
+            - "2"
+
+beat_settings:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: freedmx
+    enabled:
+      required: false
+      selector:
+        boolean:
+    source:
+      required: false
+      example: auto
+      selector:
+        text:
+    effect:
+      required: false
+      selector:
+        select:
+          options: [aus, puls, blitz, farbe, puls_farbe, lauflicht, wechsel]
+    bars:
+      required: false
+      selector:
+        select:
+          options: ["1", "2", "4", "8", "16", "32"]
+    offset_ms:
+      required: false
+      selector:
+        number:
+          min: -1000
+          max: 1000
+          step: 10
+          unit_of_measurement: ms
+    intensity:
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    lamps:
+      required: false
+      selector:
+        object:
+    manual_bpm:
+      required: false
+      selector:
+        number:
+          min: 20
+          max: 480
+          step: 0.1
+          mode: box
+    palette:
+      required: false
+      selector:
+        select:
+          options: [regenbogen, party, warm, kalt, rot_blau, gruen_lila, eigene]
+    colors:
+      required: false
+      example: '["#ff0000", "#0050ff"]'
+      selector:
+        object:
+    rate:
+      required: false
+      selector:
+        select:
+          options: ["0.5", "1", "2", "4"]
+    auto_lights:
+      required: false
+      selector:
+        boolean:
