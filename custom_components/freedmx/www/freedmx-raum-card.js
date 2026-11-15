@@ -184,11 +184,11 @@ class FreedmxRaumCard extends HTMLElement {
         .plan { flex:1 1 0; min-height:90px; display:flex; }
         .head, .info, .ctl, .warn { flex:none; }
         svg { width:100%; height:100%; touch-action:none; user-select:none; cursor:crosshair; }
-        .room { fill:color-mix(in srgb, var(--ed-tile,#ffffff) 60%, transparent); stroke:var(--ed-line2,rgba(255,255,255,.35)); stroke-width:.04; }
+        .room { fill:var(--ed-tile,rgba(255,255,255,.05)); stroke:var(--ed-line2,rgba(255,255,255,.35)); stroke-width:.04; }
         .zone { fill:color-mix(in srgb, var(--ed-green,#4cd790) 9%, transparent); stroke:var(--ed-green,#4cd790); stroke-width:.03; stroke-dasharray:.12 .08; }
         .grid line { stroke:var(--ed-line,rgba(255,255,255,.07)); stroke-width:.012; }
         .wall { stroke:var(--ed-sun,#ffc83d); stroke-width:.08; }
-        .lbl { font-size:.22px; fill:var(--secondary-text-color); }
+        .lbl { font-size:.22px; fill:var(--primary-text-color); fill-opacity:.85; paint-order:stroke; stroke:var(--ha-card-background,var(--card-background-color,#1c1c1e)); stroke-width:.06; stroke-linejoin:round; }
         .beam { stroke-width:.04; stroke-linecap:round; opacity:.55; }
         .spot { stroke:#fff; stroke-width:.03; }
         .spot.off { fill-opacity:.15 !important; stroke-dasharray:.06 .05; }
@@ -533,7 +533,8 @@ class FreedmxKanaeleCard extends HTMLElement {
         .tag { font-size:.72rem; border-radius:999px; padding:2px 8px; background:color-mix(in srgb, var(--ed-sun,#ffc83d) 22%, transparent); }
         input[type=range] { flex:1 1 140px; accent-color:var(--primary-color); }
         select { flex:1 1 180px; background:var(--ed-tile,rgba(255,255,255,.06)); color:inherit; border:1px solid var(--ed-line,rgba(255,255,255,.12)); border-radius:10px; padding:6px 8px; font:inherit; font-size:.85rem; }
-        select.vsel { flex:0 1 110px; }
+        select.fsel { flex:1 1 0; min-width:0; width:0; text-overflow:ellipsis; }
+        select.vsel { flex:0 0 110px; }
         select option { color:#000; }
         .btn { border:1px solid var(--ed-line,rgba(255,255,255,.12)); background:var(--ed-tile,rgba(255,255,255,.045)); color:inherit; border-radius:var(--ed-r-tile,12px); padding:7px 12px; font:inherit; font-size:.85rem; cursor:pointer; }
         .btn.on { background:color-mix(in srgb, var(--ed-sun,#ffc83d) 28%, transparent); }
