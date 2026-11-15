@@ -1,0 +1,53 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: Native Tests (ohne Home Assistant)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: pytest installieren (bewusst ohne HA-Testplugin)
+        run: python -m pip install pytest
+      - name: Tests ausführen
+        run: python -m pytest -q tests/test_native.py tests/test_beatcore.py
+
+  home-assistant:
+    name: Home-Assistant-Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Testpaket installieren (zieht Home Assistant 2026.2.3 mit)
+        run: python -m pip install "pytest-homeassistant-custom-component==0.13.316"
+      - name: Tests ausführen
+        run: python -m pytest -q tests/test_beat_ha.py
+
+  hassfest:
+    name: hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    name: HACS-Validierung
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with:
+          category: integration

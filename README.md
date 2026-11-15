@@ -1,5 +1,7 @@
 # Eurolite freeDMX AP für Home Assistant
 
+[![Tests](https://github.com/marceljouck95/freedmx-homeassistant/actions/workflows/tests.yml/badge.svg)](https://github.com/marceljouck95/freedmx-homeassistant/actions/workflows/tests.yml)
+
 Hinweis: privates Projekt, ohne Gewähr. Laser- und Moving-Head-Nutzung auf eigene Verantwortung.
 
 Steuert DMX-Lampen über den Eurolite freeDMX AP. Die Integration spricht das native
@@ -98,3 +100,17 @@ Neue Dienste: `freedmx.beat_settings`, `freedmx.beat_bpm`, `freedmx.beat_align`,
 Neue Karte: `custom:freedmx-beat-card` (in derselben Datei wie die Raum-Karte, Einstellungen im Karten-Editor).
 
 **Grenzen:** Der Takt wird aus Tempo und Wiedergabeposition berechnet, nicht aus dem Ton selbst. Bei Titeln mit langem Intro ohne Schlag oder mit wechselndem Tempo kann er leicht danebenliegen. Dafür gibt es ±¼ Beat; die Korrektur wird je Titel gemerkt. Beim Sendetakt „Normal“ (20 Bilder/s) sind Effekte auf ±25 ms genau.
+
+## Tests
+Bei jedem Push und Pull Request auf `main` laufen auf GitHub vier Jobs (`.github/workflows/tests.yml`):
+native Tests, Home-Assistant-Tests, hassfest und HACS-Validierung.
+
+Lokal:
+```
+pip install pytest
+python -m pytest -q tests/test_native.py tests/test_beatcore.py      # ohne Home Assistant
+
+python -m venv venv && venv/bin/pip install pytest-homeassistant-custom-component==0.13.316
+venv/bin/python -m pytest -q tests/test_beat_ha.py                   # mit echtem Home Assistant (Python 3.13)
+```
+Die beiden Gruppen laufen getrennt, weil das HA-Testplugin die Fake-Module der nativen Tests stört.
