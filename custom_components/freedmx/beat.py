@@ -190,6 +190,13 @@ class BeatEngine:
             return src
         players = self.ma_players()
         playing = [p for p in players if (st := self.hass.states.get(p)) and st.state == "playing"]
+        # Multiroom: Mitglieder einer Gruppe spielen dasselbe wie der Gruppen-Chef -> nur den Chef nehmen
+        members = set()
+        for p in playing:
+            grp = list((self.hass.states.get(p).attributes.get("group_members") or []))
+            if grp and grp[0] == p:
+                members.update(grp[1:])
+        playing = [p for p in playing if p not in members] or playing
         if self.player in playing:
             return self.player
         if playing:

@@ -376,3 +376,17 @@ async def test_live_bpm_setzt_takt(hass: HomeAssistant, no_network):
         await hass.services.async_call("freedmx", "beat_settings", {"live_bpm": False}, blocking=True)
         assert not engine._live.active
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_multiroom_nimmt_gruppenchef(hass: HomeAssistant, no_network):
+    entry = await _setup(hass)
+    engine = hass.data["freedmx"]["beats"][entry.entry_id]
+    reg = er.async_get(hass)
+    for uid, oid in (("a", "bad"), ("b", "wohnzimmer")):
+        reg.async_get_or_create("media_player", "music_assistant", uid, suggested_object_id=oid)
+    hass.states.async_set("media_player.bad", "playing", {"media_title": "X", "group_members": []})
+    hass.states.async_set("media_player.wohnzimmer", "playing", {"media_title": "X", "group_members": ["media_player.wohnzimmer", "media_player.bad"]})
+    await hass.async_block_till_done()
+    engine.player = None
+    assert engine._pick_player() == "media_player.wohnzimmer"
+    await hass.config_entries.async_unload(entry.entry_id)
