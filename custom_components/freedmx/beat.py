@@ -17,7 +17,9 @@ from homeassistant.helpers.storage import Store
 
 from .beatcore import (
     AUTO_EVERY,
+    SPECIAL_EFFECT,
     auto_pick,
+    segment_seconds,
     BARS,
     EFFECTS,
     PALETTES,
@@ -61,7 +63,7 @@ DEFAULTS: dict[str, Any] = {
     "rate": 1.0,          # Beats je Effektschritt (0.5 = doppelt so schnell)
     "auto_lights": False, # gewählte Lampen mit der Musik ein-/ausschalten
     "auto_pattern": True, # Bewegungsmuster wählt das System passend zum Tempo
-    "auto_every": 2,      # Musterwechsel alle n Durchläufe (0 = je Titel)
+    "auto_every": 0,      # Musterwechsel alle n Durchläufe (0 = nach Titellänge)
 }
 
 
@@ -217,11 +219,16 @@ class BeatEngine:
         artist = str(a.get("media_artist") or a.get("media_album_artist") or "")
         title = str(a.get("media_title") or "")
         key = track_key(artist, title) if title else ""
+        dur = a.get("media_duration")
         if key != self.track.get("key"):
             self.track = {"artist": artist, "title": title, "key": key}
             self._last_pos = None
             self.taps = TapTempo()
             self._new_track(key, artist, title, now)
+        try:
+            self.track["dur"] = float(dur) if dur else None
+        except (TypeError, ValueError):
+            self.track["dur"] = None
         if st.state != "playing":
             self.clock.stop(now)
             self.status = "Pausiert" if st.state == "paused" else "Keine Wiedergabe"
@@ -454,7 +461,7 @@ class BeatEngine:
                 lay = parse_layout(l["layout"])
             except (KeyError, ValueError):
                 continue
-            if effect_capable(lay):
+            if effect_capable(lay, l.get("preset")):
                 out.append({"id": l["id"], "name": l.get("name", l["id"])})
         return out
 
@@ -470,7 +477,7 @@ class BeatEngine:
             except (KeyError, ValueError):
                 continue
             light = lights.get(l["id"])
-            if light is None or not effect_capable(lay) or not light.is_on:
+            if light is None or not effect_capable(lay, l.get("preset")) or not light.is_on:
                 continue
             out.append((l, lay, light))
         return out
@@ -514,8 +521,14 @@ class BeatEngine:
         if not self.auto_active():
             return None
         every = int(self.settings["auto_every"])
-        cycle = int(self.beat_now() // max(1, int(self.settings["bars"])))
-        slot = (self.track.get("key") or "manuell", 0 if every == 0 else cycle // every)
+        if every == 0:
+            # nach Titellänge: Abschnitte von 20…90 s entlang der Wiedergabeposition
+            now = time.time()
+            pos = (self._last_pos[0] + now - self._last_pos[1]) if self._last_pos else self.beat_now() * 60.0 / self.clock.bpm
+            part = int(max(0.0, pos) // segment_seconds(self.track.get("dur")))
+        else:
+            part = int(self.beat_now() // max(1, int(self.settings["bars"]))) // every
+        slot = (self.track.get("key") or "manuell", part)
         if slot != self._auto_slot:
             prev = self._auto_choice[0] if self._auto_choice else None
             self._auto_choice = auto_pick(self.clock.bpm, slot[0], slot[1], prev)
@@ -540,7 +553,9 @@ class BeatEngine:
                         level, ci = effect_frame(self.settings["effect"], beat, i, len(lamps), inten, len(cols))
                         base = light._target()
                         color = cols[ci] if ci is not None else None
-                        self._device.set_channels(int(lamp["start_address"]), apply_effect(lay, base, level, color))
+                        special = SPECIAL_EFFECT.get(lamp.get("preset"))
+                        vals = special(base, level, color) if special else apply_effect(lay, base, level, color)
+                        self._device.set_channels(int(lamp["start_address"]), vals)
                         self._touched.add(lamp["id"])
                 elif self._touched:
                     self._restore_all()

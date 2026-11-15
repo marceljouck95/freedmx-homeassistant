@@ -158,3 +158,14 @@ def test_auto_pick_tempo_und_wechsel():
         pat, _ = auto_pick(90, "t", slot, prev)
         assert pat in AUTO_POOLS["ruhig"] and pat != prev
         prev = pat
+
+
+def test_fe1500_und_abschnitte():
+    assert bc.effect_capable([255, 164, 0, 0, 0, 0, 0, 30, 0], "fe1500")
+    base = [255, 164, 0, 0, 0, 0, 0, 30, 0]
+    on = bc.fe1500_effect(base, 1.0, (0, 0, 250))
+    assert on[0] >= 220 and on[1] == 22 and on[7] == 30      # Blau, Rest unverändert
+    assert bc.fe1500_effect(base, 0.2, (0, 0, 250))[1] == 0   # zwischen den Schlägen aus
+    assert bc.fe1500_effect(base, 1.0, None)[1] == 164         # ohne Farbwechsel: eigene Farbe
+    assert bc.segment_seconds(180) == 60 and bc.segment_seconds(3600) == 90
+    assert bc.segment_seconds(30) == 20 and bc.segment_seconds(None) == 60

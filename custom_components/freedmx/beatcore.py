@@ -52,7 +52,16 @@ AUTO_POOLS: dict[str, list[str]] = {
 }
 AUTO_MODES = ["gespiegelt", "versetzt", "gleich"]
 # Wechsel: nach so vielen Muster-Durchläufen (0 = nur bei neuem Titel)
-AUTO_EVERY: dict[str, str] = {"1": "Jeder Durchlauf", "2": "Alle 2 Durchläufe", "4": "Alle 4 Durchläufe", "0": "Je Titel"}
+AUTO_EVERY: dict[str, str] = {"0": "Nach Titellänge", "1": "Jeder Durchlauf", "2": "Alle 2 Durchläufe", "4": "Alle 4 Durchläufe"}
+# „Nach Titellänge“: ein Titel bekommt ~3 Muster, ein Abschnitt dauert aber 20…90 s
+# (ein einstündiges DJ-Set wechselt also etwa alle 1,5 Minuten).
+SEG_MIN, SEG_MAX, SEG_DEFAULT = 20.0, 90.0, 60.0
+
+
+def segment_seconds(duration: float | None) -> float:
+    if not duration or duration <= 0:
+        return SEG_DEFAULT
+    return max(SEG_MIN, min(SEG_MAX, float(duration) / 3.0))
 
 
 def tempo_class(bpm: float | None) -> str:
@@ -234,8 +243,35 @@ def apply_effect(layout: list, base: list[int], level: float, color: tuple[int, 
     return [max(0, min(255, int(v))) for v in vals]
 
 
-def effect_capable(layout: list) -> bool:
-    return "D" in layout or all(c in layout for c in ("R", "G", "B"))
+def effect_capable(layout: list, preset: str | None = None) -> bool:
+    return preset in SPECIAL_EFFECT or "D" in layout or all(c in layout for c in ("R", "G", "B"))
+
+
+# ---------- Sonder-Lampen ohne Dimmer/RGB ----------
+# FE-1500: Kanal 1 Betriebsart (≥220 = DMX), Kanal 2 LED-Farben (feste Farbwerte).
+FE_COLORS: list[tuple[tuple[int, int, int], int]] = [
+    ((255, 0, 0), 12), ((0, 255, 0), 17), ((0, 0, 255), 22), ((255, 140, 0), 27), ((255, 255, 255), 32),
+]
+
+
+def fe1500_effect(base: list[int], level: float, color: tuple[int, int, int] | int | None) -> list[int]:
+    """Beat-Effekt für den FE-1500: LEDs im Takt an/aus, Farbe auf die nächste LED-Farbe gerundet."""
+    vals = list(base)
+    if len(vals) < 2:
+        return vals
+    vals[0] = max(int(vals[0]), 220)  # DMX-Steuerung, sonst reagiert nichts
+    if isinstance(color, int):
+        color = PALETTE[color % len(PALETTE)]
+    if color is not None:
+        vals[1] = min(FE_COLORS, key=lambda fc: sum((a - b) ** 2 for a, b in zip(fc[0], color)))[1]
+    elif vals[1] < 10:
+        vals[1] = 160  # LEDs waren aus: alle Farben
+    if level < 0.5:
+        vals[1] = 0  # zwischen den Schlägen LEDs aus
+    return [max(0, min(255, int(v))) for v in vals]
+
+
+SPECIAL_EFFECT = {"fe1500": fe1500_effect}
 
 
 # ---------- Titel für die Tempo-Suche ----------

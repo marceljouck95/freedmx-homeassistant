@@ -1026,7 +1026,7 @@ class FreedmxBeatCard extends HTMLElement {
       speed += `<div class="lbl">Moving Heads: ein Muster-Durchlauf dauert</div>
         <div class="row">${chips((a.takte_wahl || [1, 2, 4, 8, 16, 32]).map((n) => [n, `${n} ${n === 1 ? "Beat" : "Beats"}`]), "bars", a.bars)}</div>
         <label class="chk"><button class="sw ${a.auto_pattern ? "on" : ""}" data-a="auto_pattern" aria-label="Bewegungsmuster automatisch wählen"></button>Bewegungsmuster automatisch wählen (passend zum Tempo)</label>
-        ${a.auto_pattern ? `<div class="lbl">Muster wechseln</div><div class="row">${chips(Object.entries(a.auto_wechsel_wahl || {}).map(([k, n]) => [+k, n]).sort((x, y) => (x[0] || 99) - (y[0] || 99)), "auto_every", a.auto_every)}</div>` : ""}
+        ${a.auto_pattern ? `<div class="lbl">Muster wechseln</div><div class="row">${chips(Object.entries(a.auto_wechsel_wahl || {}).map(([k, n]) => [+k, n]).sort((x, y) => x[0] - y[0]), "auto_every", a.auto_every)}</div>${a.auto_every === 0 ? `<div class="hint">Etwa 3 Muster pro Titel, ein Muster läuft 20 s bis 1,5 min. Lange Titel und DJ-Sets wechseln also regelmäßig weiter.</div>` : ""}` : ""}
         ${mu ? `<div class="lbl">Bewegungsmuster${a.auto_pattern ? " (gerade gewählt; antippen = selbst wählen, Automatik aus)" : ""}</div><div class="row">${chips((mu.attributes.options || []).map((p) => [p, frEsc(p)]), "pattern", mu.state)}</div>` : ""}
         ${a.auto_pattern ? `<div class="hint">Ruhige Titel bekommen weiche Bahnen (Kreis, Acht, Pendel …), schnelle eckige (Zickzack, Kreuz, Scanner …). Modus (gleich, gespiegelt, versetzt) wählt das System mit. Bei Pause bleiben die Köpfe stehen.</div>` : ""}`;
     }

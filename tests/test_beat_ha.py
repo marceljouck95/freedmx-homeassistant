@@ -28,6 +28,7 @@ LAMPS = [
     {"id": "bar2", "name": "LED Bar 2", "start_address": 205, "preset": "ledbar5", "layout": "R,G,B,D,0"},
     {"id": "mh1", "name": "Moving Head", "start_address": 130, "preset": "dmh40", "layout": "P,T,0,0,0,0,0,0,0,255,D,0,p,t",
      "mount": {"x": 1.75, "y": 0.2, "height": 2.5}},
+    {"id": "fe", "name": "FE-1500", "start_address": 62, "preset": "fe1500", "layout": "255,164,0,0,0,0,0,30,0"},
 ]
 
 
@@ -82,7 +83,7 @@ async def test_entities_and_deezer_tempo(hass: HomeAssistant, no_network, aiocli
     assert any(i.startswith("select.") and "effekt" in i for i in ids)
     assert sensor.attributes["entitaeten"]["muster"].startswith("select.")
     assert [p["entity_id"] for p in sensor.attributes["ma_player"]] == ["media_player.wohnzimmer"]
-    assert {l["id"] for l in sensor.attributes["lampen_wahl"]} == {"bar1", "bar2", "mh1"}
+    assert {l["id"] for l in sensor.attributes["lampen_wahl"]} == {"bar1", "bar2", "mh1", "fe"}
 
     # Wiedergabe startet -> Tempo von Deezer, Takt läuft und folgt der Position
     _ma_player(hass, "playing", "One More Time - Radio Edit", pos=30.0)
@@ -261,12 +262,13 @@ async def test_auto_pattern(hass: HomeAssistant, no_network):
     assert len(pans) > 3
 
     # Abschnittswechsel -> neues Muster (nie zweimal dasselbe hintereinander)
-    seen = []
+    seen = [engine.auto_motion()[0]]
     for _ in range(6):
         engine.nudge(1.0)
-        await asyncio.sleep(0.06)
-        seen.append(runner.pattern)
+        seen.append(engine.auto_motion()[0])
     assert all(a != b for a, b in zip(seen, seen[1:])), seen
+    await asyncio.sleep(0.06)
+    assert runner.pattern == engine.auto_motion()[0]
 
     # Pause (Beat-Sync aus) -> Köpfe bleiben stehen
     await hass.services.async_call("freedmx", "beat_settings", {"enabled": False}, blocking=True)
@@ -280,4 +282,31 @@ async def test_auto_pattern(hass: HomeAssistant, no_network):
     await asyncio.sleep(0.1)
     assert engine.settings["auto_pattern"] is False
     assert runner.pattern == "kreis"
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_fe1500_und_titellaenge(hass: HomeAssistant, no_network):
+    entry = await _setup(hass)
+    engine = hass.data["freedmx"]["beats"][entry.entry_id]
+    device = entry.runtime_data
+    assert "fe" in {l["id"] for l in engine.lamp_choices()}
+    fe = next(s.entity_id for s in hass.states.async_all("light") if s.attributes.get("lamp_id") == "fe")
+    await hass.services.async_call("light", "turn_on", {"entity_id": fe}, blocking=True)
+    await hass.services.async_call("freedmx", "beat_settings", {"source": "manuell", "manual_bpm": 120, "enabled": True, "effect": "blitz", "intensity": 100, "lamps": ["fe"]}, blocking=True)
+    seen = set()
+    for _ in range(40):
+        seen.add(device.get_channels(63, 1)[0])
+        await asyncio.sleep(0.03)
+    assert 0 in seen and len(seen - {0}) >= 1, seen
+    assert device.get_channels(62, 1)[0] >= 220
+
+    # nach Titellänge (Standard): Abschnitt wechselt nach Position, nicht nach Durchläufen
+    assert engine.settings["auto_every"] == 0
+    engine.track = {"key": "dj|set", "dur": 3600.0}
+    engine._last_pos = (10.0, time.time())
+    a = engine.auto_motion()
+    engine._last_pos = (50.0, time.time())
+    assert engine.auto_motion() == a                     # gleicher 90-s-Abschnitt
+    engine._last_pos = (100.0, time.time())
+    assert engine.auto_motion()[0] != a[0]               # nächster Abschnitt, anderes Muster
     await hass.config_entries.async_unload(entry.entry_id)
