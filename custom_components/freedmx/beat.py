@@ -507,7 +507,8 @@ class BeatEngine:
             except (KeyError, ValueError):
                 continue
             light = lights.get(l["id"])
-            if light is None or not effect_capable(lay, l.get("preset")) or not light.is_on:
+            if (light is None or not effect_capable(lay, l.get("preset")) or not light.is_on
+                    or getattr(light, "manual_until", 0) > time.monotonic()):  # gerade von Hand bedient
                 continue
             out.append((l, lay, light))
         return out

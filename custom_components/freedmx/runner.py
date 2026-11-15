@@ -115,6 +115,10 @@ class PatternRunner:
                 if self._room.limit:
                     x, y = clamp_point(self._room, mount, x, y)
                 pan, tilt = aim_percent(mount, x, y)
+                # alle Positionskanäle einer Lampe in einem Schritt schreiben (keine halben Positionen)
+                start = int(lamp["start_address"])
+                vals = self._device.get_channels(start, len(parse_layout(lamp["layout"])))
                 for channel, value in position_writes(lamp, percent_to_16bit(pan), percent_to_16bit(tilt)):
-                    self._device.set_channels(channel, [value])
+                    vals[channel - start] = value
+                self._device.set_channels(start, vals)
             await asyncio.sleep(STEP)

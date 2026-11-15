@@ -37,6 +37,16 @@ def auto_enable_custom_integrations(enable_custom_integrations):
     yield
 
 
+@pytest.fixture(autouse=True)
+def no_manual_pause(request):
+    """Ältere Tests erwarten den Effekt sofort nach dem Einschalten."""
+    if "manual_pause" in request.node.name:
+        yield
+        return
+    with patch("custom_components.freedmx.light.FreeDmxLight.MANUAL_PAUSE", 0.0):
+        yield
+
+
 @pytest.fixture
 def no_network():
     async def start(self):
@@ -389,4 +399,25 @@ async def test_multiroom_nimmt_gruppenchef(hass: HomeAssistant, no_network):
     await hass.async_block_till_done()
     engine.player = None
     assert engine._pick_player() == "media_player.wohnzimmer"
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_manual_pause_effekt_laesst_lampe_in_ruhe(hass: HomeAssistant, no_network):
+    entry = await _setup(hass)
+    device = entry.runtime_data
+    await hass.services.async_call("freedmx", "beat_settings", {"source": "manuell", "manual_bpm": 120, "enabled": True, "effect": "blitz", "intensity": 100}, blocking=True)
+    bar = next(s.entity_id for s in hass.states.async_all("light") if s.attributes.get("lamp_id") == "bar1")
+    await hass.services.async_call("light", "turn_on", {"entity_id": bar, "brightness": 200, "rgb_color": [0, 0, 255]}, blocking=True)
+    seen = set()
+    for _ in range(30):
+        seen.add(tuple(device.get_channels(200, 4)))
+        await asyncio.sleep(0.03)
+    assert seen == {(0, 0, 255, 200)}, seen        # 10 s Pause: Farbe und Helligkeit bleiben stehen
+    light = hass.data["freedmx"]["lights"]["bar1"]
+    light.manual_until = 0
+    seen = set()
+    for _ in range(40):
+        seen.add(device.get_channels(203, 1)[0])
+        await asyncio.sleep(0.03)
+    assert 0 in seen and 200 in seen, seen          # danach läuft der Effekt wieder
     await hass.config_entries.async_unload(entry.entry_id)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any
 
 from homeassistant.components.light import (
@@ -19,6 +20,7 @@ from homeassistant.const import STATE_ON
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .device import FreeDmxDevice
@@ -63,6 +65,12 @@ class FreeDmxLight(LightEntity, RestoreEntity):
     _attr_name = None
     _attr_should_poll = False
     _attr_supported_features = LightEntityFeature.TRANSITION
+    # große, sich ständig ändernde Anzeige-Daten nicht in die Datenbank schreiben
+    _unrecorded_attributes = frozenset({"kanaele", "kanal_werte", "raum", "montage", "ziel"})
+    manual_until = 0.0  # bis dahin lässt Beat-Sync die Lampe in Ruhe (gerade von Hand bedient)
+    _pos_timer = None
+
+    MANUAL_PAUSE = 10.0
 
     def __init__(
         self, entry: ConfigEntry, sender: FreeDmxDevice, lamp: dict, room: dict | None
@@ -173,7 +181,17 @@ class FreeDmxLight(LightEntity, RestoreEntity):
         if last < self._start or first > end or not self.hass:
             return
         current = read_position(self._layout, self._sender.get_channels(self._start, len(self._layout)))
-        if current != self._last_pos:  # nur bei Positionsänderung neu melden
+        if current != self._last_pos and self._pos_timer is None:
+            # Bewegungsmuster ändern die Position 25x/s – höchstens 2x/s melden
+            self._pos_timer = async_call_later(self.hass, 0.5, self._flush_pos)
+
+    @callback
+    def _flush_pos(self, _now=None) -> None:
+        self._pos_timer = None
+        if not self.hass:
+            return
+        current = read_position(self._layout, self._sender.get_channels(self._start, len(self._layout)))
+        if current != self._last_pos:
             self._last_pos = current
             self.async_write_ha_state()
 
@@ -183,6 +201,9 @@ class FreeDmxLight(LightEntity, RestoreEntity):
 
     async def async_will_remove_from_hass(self) -> None:
         self._cancel_fade()
+        if self._pos_timer:
+            self._pos_timer()
+            self._pos_timer = None
 
     def _color(self) -> tuple[int, ...] | None:
         if self._mode == MODE_RGB:
@@ -251,6 +272,7 @@ class FreeDmxLight(LightEntity, RestoreEntity):
             self._overrides.pop(idx, None)
         else:
             self._overrides[idx] = max(0, min(255, int(value)))
+        self.manual_until = time.monotonic() + self.MANUAL_PAUSE
         self._apply(None)
         self.async_write_ha_state()
 
@@ -264,12 +286,14 @@ class FreeDmxLight(LightEntity, RestoreEntity):
         if not self._attr_brightness:
             self._attr_brightness = 255
         self._attr_is_on = True
+        self.manual_until = time.monotonic() + self.MANUAL_PAUSE
         self._sender.free_lamps.discard(self._lamp[LAMP_ID])
         self._apply(kwargs.get(ATTR_TRANSITION))
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         self._attr_is_on = False
+        self.manual_until = time.monotonic() + self.MANUAL_PAUSE
         self._apply(kwargs.get(ATTR_TRANSITION))
         if self._has_pos:
             # Grundstellung anfahren (ohne Raum-Begrenzung, Licht ist ja aus)
