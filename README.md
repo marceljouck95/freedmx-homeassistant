@@ -83,6 +83,11 @@ Licht und Moving Heads laufen automatisch im Takt der Musik, die über Music Ass
 - **Takt:** kommt aus der Wiedergabeposition des Players. Start, Pause, Spulen und Titelwechsel werden übernommen, dazwischen läuft der Takt gleichmäßig weiter.
 - **Effekte:** Puls, Blitz, Farbwechsel, Puls + Farbe, Lauflicht, Wechsel. Sie wirken auf ausgewählte Lampen mit Dimmer oder RGB.
 - **Farben:** feste Paletten oder bis zu 8 eigene Farben.
+  Die Palette gilt (Schalter „Palette auch bei Puls, Blitz …“, Standard an) bei allen Effekten; aus = eigene Lampenfarbe. Je Lampentyp:
+  - **RGB-Lampen** (z. B. LED Bar): Farbe direkt.
+  - **Futurelight DMH-40:** nächste Farbrad-Farbe (Kanal 4), ungesättigte Farben = Weiß. Das Farbrad wechselt höchstens alle 250 ms; der Dimmer pulst im Takt.
+  - **Eurolite FE-1500:** DMX-Betriebsart, nächste LED-Farbe (Kanal 2), Puls über LEDs an/aus (kein Dimmer), Laser rot/grün passend zur Farbe im Takt (abschaltbar), Drehung leicht an.
+  DMH-40 und FE-1500 werden auch mit „Eigenem Layout“ erkannt.
 - **Geschwindigkeit:** Effekt doppelt so schnell, jeder Beat, alle 2 Beats oder jeder Takt. Ein Muster-Durchlauf der Moving Heads dauert 1–32 Beats.
 - **Moving-Head-Tempo:** Die Kopfgeschwindigkeit (Futurelight DMH-40, Kanal 3: 0 = schnellste, 225 = langsamste; Werte darüber werden nie geschrieben) folgt dem Tempo der Musik: etwa 70 BPM und langsamer = langsam, 128 BPM = „Standard-Geschwindigkeit“, 175 BPM und schneller = schnell, dazwischen glatt. Die Muster-Durchläufe laufen ohnehin im Takt (1–32 Beats). In der Karte unter „Geschwindigkeit“: Schalter „Moving-Head-Tempo folgt dem Beat“ und Regler „Standard-Geschwindigkeit“ (1–100 %, Standard 50; gilt dauerhaft, wenn der Schalter aus ist). Einstellungen `mh_speed_auto` und `mh_speed` im Dienst `freedmx.beat_settings`. Köpfe, die du gerade von Hand bedienst, oder ein selbst gesetzter Kanal 3 bleiben unberührt; Werte werden nur bei Änderung gesendet.
 - **Automatik:** gewählte Lampen gehen mit der Musik an und nach 20 s Stille wieder aus.

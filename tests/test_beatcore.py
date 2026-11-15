@@ -209,3 +209,77 @@ def test_mh_speed_automatik_aus_oder_ohne_tempo_gilt_standard():
 def test_mh_speed_standard_verschiebt_die_mitte():
     assert bc.mh_speed_value(128, 20) > bc.mh_speed_value(128, 80)
     assert bc.mh_speed_value(70, 80) > bc.mh_speed_value(128, 80) > bc.mh_speed_value(175, 80)
+
+
+MH = ["P", "T", 0, 0, 0, 0, 0, 0, 0, 255, "D", 0, "p", "t"]
+FE = [255, 164, 0, 0, 0, 0, 0, 30, 0]
+BAR = ["R", "G", "B", "D", 0]
+
+
+def test_lampentyp_erkennung():
+    assert bc.lamp_kind(MH, "dmh40") == "dmh40"
+    assert bc.lamp_kind(MH, "custom") == "dmh40"          # eigenes Layout, gleiche Belegung
+    assert bc.lamp_kind(FE, None) == "fe1500"             # FE-1500 ohne Voreinstellung
+    assert bc.effect_capable(FE, "custom")
+    assert bc.lamp_kind(BAR, "ledbar5") is None
+    assert not bc.effect_capable([255, 164, 0, 0])
+
+
+def test_farbe_auf_dmh40_farbrad():
+    w = bc.dmh40_wheel
+    assert 15 <= w((255, 0, 0)) <= 29                       # Rot
+    assert 30 <= w((0, 48, 255)) <= 44                      # Blau
+    assert 45 <= w((0, 255, 64)) <= 59                      # Grün
+    assert 60 <= w((255, 255, 0)) <= 74                     # Gelb -> Hellgelb
+    assert 75 <= w((255, 0, 255)) <= 89                     # Magenta
+    assert 105 <= w((0, 255, 255)) <= 119                   # Cyan -> Hellblau
+    assert w((255, 255, 255)) <= 14 and w((200, 190, 180)) <= 14   # ungesättigt -> Weiß
+    assert w(None) is None
+    # alle Paletten landen im Farbbereich 0…127 (kein Regenbogen-Modus)
+    for key in bc.PALETTES:
+        assert all(0 <= w(c) <= 127 for c in bc.palette_rgb(key))
+    # Effekt: Dimmer pulst, Farbrad (Kanal 4) gesetzt, Shutter offen, Position/Kanal 3 unverändert
+    base = [10, 20, 77, 0, 0, 0, 0, 0, 0, 255, 255, 0, 30, 40]
+    out = bc.dmh40_effect(MH, base, 0.5, (255, 0, 0), w((255, 0, 0)))
+    assert 15 <= out[3] <= 29 and out[10] == 128 and out[9] == 255
+    assert out[:3] == [10, 20, 77] and out[12:] == [30, 40]
+    assert bc.dmh40_effect(MH, base, 1.0, None, None)[3] == 0   # ohne Farbwunsch: Farbrad wie eingestellt
+
+
+def test_farbrad_wechselt_nicht_zu_schnell():
+    st = {}
+    assert bc.hold_mechanical(st, "mh", 22, 0.0) == 22
+    assert bc.hold_mechanical(st, "mh", 37, 0.1) == 22      # < 250 ms: bleibt
+    assert bc.hold_mechanical(st, "mh", 37, 0.3) == 37
+    assert bc.hold_mechanical(st, "mh", 37, 0.35) == 37
+
+
+def test_farbe_auf_fe1500():
+    on = bc.fe1500_effect(FE, 1.0, (255, 0, 0))
+    assert 220 <= on[0] <= 255 and on[1] == 12                # DMX-Steuerung, Rot
+    assert 10 <= on[5] <= 49                                  # Laser rot im Takt
+    assert on[7] >= 5 and on[8] >= 5                          # Drehung an
+    assert bc.fe1500_effect(FE, 1.0, (0, 255, 64))[1] == 17   # Grün
+    assert 50 <= bc.fe1500_effect(FE, 1.0, (0, 255, 64))[5] <= 89
+    assert bc.fe1500_effect(FE, 1.0, (255, 255, 0))[1] == 42  # Gelb = Rot + Grün
+    assert bc.fe1500_effect(FE, 1.0, (250, 250, 250))[1] == 32  # Weiß
+    off = bc.fe1500_effect(FE, 0.2, (255, 0, 0))
+    assert off[1] == 0 and off[5] == 0                        # zwischen den Schlägen aus
+    # Betriebsart ausserhalb DMX (z. B. von Hand auf Musik) -> DMX
+    assert bc.fe1500_effect([120] + FE[1:], 1.0, None)[0] == 230
+    # Schwelle: bei geringer Stärke trotzdem an/aus
+    assert bc.fe1500_effect(FE, 0.8, (255, 0, 0), threshold=0.85)[1] == 0
+    assert bc.fe1500_effect(FE, 1.0, (255, 0, 0), laser=False)[5] == 0
+
+
+def test_rgb_bar_bekommt_palette_statt_weiss():
+    cols = bc.palette_rgb("rot_blau")
+    base = [255, 255, 255, 255, 0]                            # Lampe steht auf Weiß
+    for effect in ("puls", "blitz", "lauflicht", "wechsel"):
+        level, ci = bc.effect_frame(effect, 3.0, 0, 3, 0.7, len(cols))
+        assert ci is None
+        ci = bc.effect_color(effect, 3.0, 0, len(cols))
+        out = bc.apply_effect(BAR, base, level, cols[ci])
+        assert tuple(out[:3]) in cols and out[:3] != [255, 255, 255], (effect, out)
+    assert bc.effect_color("farbe", 3.0, 0, 2) is None        # hat eigenen Farbwechsel
+    assert bc.effect_color("puls", 4.0, 0, 2) != bc.effect_color("puls", 5.0, 0, 2)

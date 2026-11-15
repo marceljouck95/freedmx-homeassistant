@@ -443,4 +443,18 @@ async def test_mh_speed_folgt_beat_nie_ueber_225(hass: HomeAssistant, no_network
     light._overrides[2] = 99
     assert engine.mh_speed_for(lamp, light) is None             # Kanal von Hand gesetzt
     assert engine.mh_speed_for(LAMPS[0]) is None                # Lampe ohne Geschwindigkeitskanal
+
+
+async def test_palette_farben_bar_und_farbrad(hass: HomeAssistant, no_network):
+    entry = await _setup(hass)
+    device = entry.runtime_data
+    for lid in ("bar1", "mh1"):
+        eid = next(s.entity_id for s in hass.states.async_all("light") if s.attributes.get("lamp_id") == lid)
+        await hass.services.async_call("light", "turn_on", {"entity_id": eid, "brightness": 255}, blocking=True)
+    await hass.services.async_call("freedmx", "beat_settings", {
+        "source": "manuell", "manual_bpm": 120, "enabled": True, "effect": "puls",
+        "palette": "eigene", "colors": ["#ff0000"], "lamps": ["bar1", "mh1"]}, blocking=True)
+    await asyncio.sleep(0.2)
+    assert device.get_channels(200, 3) == [255, 0, 0]          # Bar rot statt weiß
+    assert 15 <= device.get_channels(133, 1)[0] <= 29           # DMH-40 Farbrad Rot
     await hass.config_entries.async_unload(entry.entry_id)

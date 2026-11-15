@@ -163,6 +163,7 @@ BEAT_SETTING_KEYS = (
     "enabled", "source", "effect", "bars", "offset_ms", "intensity", "lamps", "players", "manual_bpm",
     "palette", "colors", "rate", "auto_lights", "auto_pattern", "auto_every", "live_bpm", "live_interval",
     "mh_speed_auto", "mh_speed",
+    "palette_all", "laser",
 )
 BEAT_SETTINGS_SCHEMA = BEAT_BASE_SCHEMA.extend(
     {
@@ -185,6 +186,8 @@ BEAT_SETTINGS_SCHEMA = BEAT_BASE_SCHEMA.extend(
         vol.Optional("live_interval"): vol.All(vol.Coerce(int), vol.In([5, 10])),
         vol.Optional("mh_speed_auto"): cv.boolean,
         vol.Optional("mh_speed"): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
+        vol.Optional("palette_all"): cv.boolean,
+        vol.Optional("laser"): cv.boolean,
     }
 )
 
