@@ -955,6 +955,7 @@ class FreedmxBeatCard extends HTMLElement {
     else if (a === "auto_lights") this._set({ auto_lights: !at.auto_lights });
     else if (a === "auto_pattern") this._set({ auto_pattern: !at.auto_pattern });
     else if (a === "live_bpm") this._set({ live_bpm: !at.live_bpm });
+    else if (a === "live_interval") this._set({ live_interval: +v });
     else if (a === "auto_every") this._set({ auto_every: +v });
     else if (a === "col-add") { const c = [...(at.farben || [])]; if (c.length < 8) this._set({ colors: [...c, "#ffffff"], palette: "eigene" }); }
     else if (a === "col-del") { const c = [...(at.farben || [])]; if (c.length > 1) { c.splice(+v, 1); this._set({ colors: c }); } }
@@ -985,7 +986,7 @@ class FreedmxBeatCard extends HTMLElement {
     this._anchor = { ms: a.anker_ms, beat: a.anker_beat, bpm: parseFloat(st.state), on: !!a.laeuft && !!a.enabled };
     // Regler und Farbwähler nicht neu zeichnen, solange sie bedient werden
     if (this.shadowRoot.activeElement && /INPUT|SELECT/.test(this.shadowRoot.activeElement.tagName)) return;
-    const keys = ["enabled", "source", "effect", "bars", "offset_ms", "intensity", "lampen", "lampen_wahl", "ma_player", "status", "bpm_quelle", "titel", "kuenstler", "manual_bpm", "laeuft", "palette", "farben", "rate", "auto_lights", "auto_pattern", "auto_every", "live_bpm", "live_status"];
+    const keys = ["enabled", "source", "effect", "bars", "offset_ms", "intensity", "lampen", "lampen_wahl", "ma_player", "status", "bpm_quelle", "titel", "kuenstler", "manual_bpm", "laeuft", "palette", "farben", "rate", "auto_lights", "auto_pattern", "auto_every", "live_bpm", "live_status", "live_interval"];
     const sig = JSON.stringify([st.state, keys.map((k) => a[k]), mu?.state, mu?.attributes?.options, c, this._err]);
     if (sig === this._sig) return;
     this._sig = sig;
@@ -1043,7 +1044,8 @@ class FreedmxBeatCard extends HTMLElement {
       h += sec("fine", "Quelle und Feinjustage", `
         <div class="row"><select data-k="source" aria-label="Taktquelle">${opt(src, a.source)}</select>
           ${manual ? `<input type="number" data-k="manual_bpm" min="20" max="480" step="0.1" value="${frEsc(a.manual_bpm)}" aria-label="BPM">` : ""}</div>
-        <label class="chk"><button class="sw ${a.live_bpm ? "on" : ""}" data-a="live_bpm" aria-label="Live-Tempo"></button>Radio live mithören, Tempo alle 5 s messen</label>
+        <label class="chk"><button class="sw ${a.live_bpm ? "on" : ""}" data-a="live_bpm" aria-label="Live-Tempo"></button>Radio live mithören und Tempo messen</label>
+        ${a.live_bpm ? `<div class="row">${chips([[5, "Normal (alle 5 s)"], [10, "Ruhig (alle 10 s)"]], "live_interval", a.live_interval)}</div>` : ""}
         ${a.live_status ? `<div class="hint">${frEsc(a.live_status)}</div>` : ""}
         <div class="lbl">Versatz Lautsprecher (Licht später = +)</div>
         <div class="sl"><input type="range" min="-500" max="500" step="10" data-k="offset_ms" value="${a.offset_ms}"><span>${this._fmtSl("offset_ms", a.offset_ms)}</span></div>

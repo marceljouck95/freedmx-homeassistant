@@ -428,6 +428,10 @@
         "live_bpm": {
           "name": "live_bpm",
           "description": "live_bpm"
+        },
+        "live_interval": {
+          "name": "live_interval",
+          "description": "live_interval"
         }
       }
     }

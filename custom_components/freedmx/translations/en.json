@@ -428,6 +428,10 @@
         "live_bpm": {
           "name": "Live tempo (radio)",
           "description": "Live tempo (radio)"
+        },
+        "live_interval": {
+          "name": "Live tempo interval",
+          "description": "Live tempo interval"
         }
       }
     }

@@ -63,8 +63,10 @@ class Smoother:
 
 
 class LiveTempo:
-    def __init__(self, hass: HomeAssistant, on_bpm: Callable[[float], None]) -> None:
+    def __init__(self, hass: HomeAssistant, on_bpm: Callable[[float], None],
+                 interval: Callable[[], float] | None = None) -> None:
         self.hass = hass
+        self._interval = interval or (lambda: EVERY_S)
         self._on_bpm = on_bpm
         self.source_id: str | None = None   # Music-Assistant-Kennung, die gerade gehört wird
         self.status = ""
@@ -168,7 +170,6 @@ class LiveTempo:
         import numpy as np
 
         need = int(RATE * WINDOW_S) * 2
-        step = int(RATE * EVERY_S) * 2
         buf = deque()
         size = 0
         since = 0
@@ -181,6 +182,7 @@ class LiveTempo:
             since += len(chunk)
             while size - len(buf[0]) >= need:
                 size -= len(buf.popleft())
+            step = int(RATE * max(1.0, float(self._interval()))) * 2
             if since >= step and size >= need:
                 since = 0
                 pcm = b"".join(buf)[-need:]

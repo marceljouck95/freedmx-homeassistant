@@ -330,7 +330,7 @@ async def test_live_tempo_stream_und_aufloesung(hass: HomeAssistant, aioclient_m
     from custom_components.freedmx.live import LiveTempo, Smoother, fold_to
 
     got = []
-    live = LiveTempo(hass, got.append)
+    live = LiveTempo(hass, got.append, lambda: 5)
     reader = asyncio.StreamReader()
     reader.feed_data(_clicks(128, 31))
     reader.feed_eof()
@@ -371,6 +371,8 @@ async def test_live_bpm_setzt_takt(hass: HomeAssistant, no_network):
         assert engine._live.active and engine._live.source_id.endswith("s263403")
         engine._live_bpm(126.0)
         assert engine.clock.bpm == pytest.approx(126) and engine.bpm_source == "Live-Analyse" and engine.clock.ready
+        await hass.services.async_call("freedmx", "beat_settings", {"live_interval": 10}, blocking=True)
+        assert engine._live._interval() == 10 and engine.info()["live_interval"] == 10
         await hass.services.async_call("freedmx", "beat_settings", {"live_bpm": False}, blocking=True)
         assert not engine._live.active
     await hass.config_entries.async_unload(entry.entry_id)

@@ -65,7 +65,8 @@ DEFAULTS: dict[str, Any] = {
     "auto_lights": False, # gewählte Lampen mit der Musik ein-/ausschalten
     "auto_pattern": True, # Bewegungsmuster wählt das System passend zum Tempo
     "auto_every": 0,
-    "live_bpm": True,     # Radio-Streams selbst mithören, Tempo alle 5 s messen      # Musterwechsel alle n Durchläufe (0 = nach Titellänge)
+    "live_bpm": True,     # Radio-Streams selbst mithören und das Tempo messen
+    "live_interval": 5,   # Sekunden zwischen zwei Messungen (5 = normal, 10 = ruhig)      # Musterwechsel alle n Durchläufe (0 = nach Titellänge)
 }
 
 
@@ -98,7 +99,7 @@ class BeatEngine:
         self._auto_slot: tuple | None = None        # (Titel, Abschnitt) der letzten Musterwahl
         self._auto_choice: tuple[str, str] | None = None
         self.runner = None                          # PatternRunner (Moving Heads), wird nach dem Start gesetzt
-        self._live = LiveTempo(hass, self._live_bpm)  # Live-Tempo aus dem Radio-Stream
+        self._live = LiveTempo(hass, self._live_bpm, lambda: self.settings["live_interval"])  # Live-Tempo aus dem Radio-Stream
 
     # ---------- Grundlagen ----------
     async def async_start(self) -> None:
@@ -452,6 +453,8 @@ class BeatEngine:
                     continue
             if k == "rate":
                 v = min((0.5, 1.0, 2.0, 4.0), key=lambda r: abs(r - float(v)))
+            if k == "live_interval":
+                v = 10 if int(v) >= 8 else 5
             if k in ("auto_lights", "auto_pattern", "live_bpm"):
                 v = bool(v)
             if k == "auto_every":
@@ -616,6 +619,7 @@ class BeatEngine:
             "auto_wechsel_wahl": AUTO_EVERY,
             "live_bpm": self.settings["live_bpm"],
             "live_status": self._live.status,
+            "live_interval": self.settings["live_interval"],
             "auto_muster": self._auto_choice[0] if self._auto_choice and self.auto_active() else None,
             "paletten": {k: {"name": v[0], "farben": v[1]} for k, v in PALETTES.items()},
             "raten": RATES,

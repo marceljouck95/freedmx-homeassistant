@@ -428,6 +428,10 @@
         "live_bpm": {
           "name": "Live-Tempo (Radio)",
           "description": "Live-Tempo (Radio)"
+        },
+        "live_interval": {
+          "name": "Messintervall Live-Tempo",
+          "description": "Messintervall Live-Tempo"
         }
       }
     }

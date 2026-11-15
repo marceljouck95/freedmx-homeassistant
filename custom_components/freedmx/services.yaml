@@ -305,3 +305,8 @@ beat_settings:
       required: false
       selector:
         boolean:
+    live_interval:
+      required: false
+      selector:
+        select:
+          options: ["5", "10"]
