@@ -954,6 +954,7 @@ class FreedmxBeatCard extends HTMLElement {
     else if (a === "palette") this._set({ palette: v });
     else if (a === "auto_lights") this._set({ auto_lights: !at.auto_lights });
     else if (a === "auto_pattern") this._set({ auto_pattern: !at.auto_pattern });
+    else if (a === "mh_speed_auto") this._set({ mh_speed_auto: !at.mh_speed_auto });
     else if (a === "live_bpm") this._set({ live_bpm: !at.live_bpm });
     else if (a === "live_interval") this._set({ live_interval: +v });
     else if (a === "auto_every") this._set({ auto_every: +v });
@@ -981,7 +982,7 @@ class FreedmxBeatCard extends HTMLElement {
     const at = this._st?.attributes || {};
     if (k === "source") this._set({ source: t.value });
     else if (k === "manual_bpm") { const n = parseFloat(String(t.value).replace(",", ".")); if (n >= 20 && n <= 480) this._call("beat_bpm", { bpm: n }); }
-    else if (k === "offset_ms" || k === "intensity") this._set({ [k]: +t.value });
+    else if (k === "offset_ms" || k === "intensity" || k === "mh_speed") this._set({ [k]: +t.value });
     else if (k === "col") { const c = [...(at.farben || [])]; c[+t.dataset.i] = t.value; this._set({ colors: c, palette: "eigene" }); }
   }
 
@@ -995,7 +996,7 @@ class FreedmxBeatCard extends HTMLElement {
     this._anchor = { ms: a.anker_ms, beat: a.anker_beat, bpm: parseFloat(st.state), on: !!a.laeuft && !!a.enabled };
     // Regler und Farbwähler nicht neu zeichnen, solange sie bedient werden
     if (this.shadowRoot.activeElement && /INPUT|SELECT/.test(this.shadowRoot.activeElement.tagName)) return;
-    const keys = ["enabled", "source", "effect", "bars", "offset_ms", "intensity", "lampen", "lampen_wahl", "ma_player", "player_wahl", "player", "status", "bpm_quelle", "titel", "kuenstler", "manual_bpm", "laeuft", "palette", "farben", "rate", "auto_lights", "auto_pattern", "auto_every", "live_bpm", "live_status", "live_interval"];
+    const keys = ["enabled", "source", "effect", "bars", "offset_ms", "intensity", "lampen", "lampen_wahl", "ma_player", "player_wahl", "player", "status", "bpm_quelle", "titel", "kuenstler", "manual_bpm", "laeuft", "palette", "farben", "rate", "auto_lights", "auto_pattern", "auto_every", "live_bpm", "live_status", "live_interval", "mh_speed_auto", "mh_speed"];
     const sig = JSON.stringify([st.state, keys.map((k) => a[k]), mu?.state, mu?.attributes?.options, c, this._err]);
     if (sig === this._sig) return;
     this._sig = sig;
@@ -1051,6 +1052,10 @@ class FreedmxBeatCard extends HTMLElement {
         <label class="chk"><button class="sw ${a.auto_pattern ? "on" : ""}" data-a="auto_pattern" aria-label="Bewegungsmuster automatisch wählen"></button>Bewegungsmuster automatisch wählen (passend zum Tempo)</label>
         ${a.auto_pattern ? `<div class="lbl">Muster wechseln</div><div class="row">${chips(Object.entries(a.auto_wechsel_wahl || {}).map(([k, n]) => [+k, n]).sort((x, y) => x[0] - y[0]), "auto_every", a.auto_every)}</div>${a.auto_every === 0 ? `<div class="hint">Etwa 3 Muster pro Titel, ein Muster läuft 20 s bis 1,5 min. Lange Titel und DJ-Sets wechseln also regelmäßig weiter.</div>` : ""}` : ""}
         ${mu ? `<div class="lbl">Bewegungsmuster${a.auto_pattern ? " (gerade gewählt; antippen = selbst wählen, Automatik aus)" : ""}</div><div class="row">${chips((mu.attributes.options || []).map((p) => [p, frEsc(p)]), "pattern", mu.state)}</div>` : ""}
+        <label class="chk"><button class="sw ${a.mh_speed_auto ? "on" : ""}" data-a="mh_speed_auto" aria-label="Moving-Head-Tempo folgt dem Beat"></button>Moving-Head-Tempo folgt dem Beat</label>
+        <div class="lbl">Standard-Geschwindigkeit${a.mh_speed_auto ? " (Mitte der Automatik)" : ""}</div>
+        <div class="sl"><input type="range" min="1" max="100" step="1" data-k="mh_speed" value="${a.mh_speed ?? 50}"><span>${this._fmtSl("mh_speed", a.mh_speed ?? 50)}</span></div>
+        <div class="hint">Langsamer Beat (ab etwa 70 BPM) = langsame Kopfbewegung, schneller (ab etwa 175 BPM) = schnelle. Ist der Schalter aus, gilt immer die Standard-Geschwindigkeit. Von Hand eingestellte Köpfe bleiben unberührt.</div>
         ${a.auto_pattern ? `<div class="hint">Ruhige Titel bekommen weiche Bahnen (Kreis, Acht, Pendel …), schnelle eckige (Zickzack, Kreuz, Scanner …). Modus (gleich, gespiegelt, versetzt) wählt das System mit. Bei Pause bleiben die Köpfe stehen.</div>` : ""}`;
     }
     h += sec("speed", "Geschwindigkeit", speed, true);

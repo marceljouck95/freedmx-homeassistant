@@ -84,6 +84,7 @@ Licht und Moving Heads laufen automatisch im Takt der Musik, die über Music Ass
 - **Effekte:** Puls, Blitz, Farbwechsel, Puls + Farbe, Lauflicht, Wechsel. Sie wirken auf ausgewählte Lampen mit Dimmer oder RGB.
 - **Farben:** feste Paletten oder bis zu 8 eigene Farben.
 - **Geschwindigkeit:** Effekt doppelt so schnell, jeder Beat, alle 2 Beats oder jeder Takt. Ein Muster-Durchlauf der Moving Heads dauert 1–32 Beats.
+- **Moving-Head-Tempo:** Die Kopfgeschwindigkeit (Futurelight DMH-40, Kanal 3: 0 = schnellste, 225 = langsamste; Werte darüber werden nie geschrieben) folgt dem Tempo der Musik: etwa 70 BPM und langsamer = langsam, 128 BPM = „Standard-Geschwindigkeit“, 175 BPM und schneller = schnell, dazwischen glatt. Die Muster-Durchläufe laufen ohnehin im Takt (1–32 Beats). In der Karte unter „Geschwindigkeit“: Schalter „Moving-Head-Tempo folgt dem Beat“ und Regler „Standard-Geschwindigkeit“ (1–100 %, Standard 50; gilt dauerhaft, wenn der Schalter aus ist). Einstellungen `mh_speed_auto` und `mh_speed` im Dienst `freedmx.beat_settings`. Köpfe, die du gerade von Hand bedienst, oder ein selbst gesetzter Kanal 3 bleiben unberührt; Werte werden nur bei Änderung gesendet.
 - **Automatik:** gewählte Lampen gehen mit der Musik an und nach 20 s Stille wieder aus.
 - **Feinjustage (selten nötig):** Lautsprecher-Versatz in ms, ±¼ Beat, halbes/doppeltes Tempo, „Jetzt ist 1“, Tippen als Notlösung.
 

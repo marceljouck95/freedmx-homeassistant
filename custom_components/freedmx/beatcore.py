@@ -274,6 +274,39 @@ def fe1500_effect(base: list[int], level: float, color: tuple[int, int, int] | i
 SPECIAL_EFFECT = {"fe1500": fe1500_effect}
 
 
+# ---------- Moving-Head-Tempo ----------
+# Futurelight DMH-40, Kanal 3 (Index 2): Pan/Tilt-Geschwindigkeit, 0 = schnellste, 225 = langsamste;
+# 226-255 sind Sonderfunktionen (Blackout) und werden nie geschrieben.
+MH_SPEED_CHANNEL = {"dmh40": 2}
+MH_SPEED_MAX = 225
+BPM_SLOW = 70.0     # ab hier (und darunter) langsamste Bewegung der Automatik
+BPM_MID = 128.0     # mittleres Tempo = Standard-Geschwindigkeit
+BPM_FAST = 175.0    # ab hier (und darüber) schnellste Bewegung der Automatik
+MH_SPEED_REACH = 0.8  # Anteil des Weges bis zum Anschlag, den die Automatik ausnutzt
+
+
+def mh_speed_percent(bpm: float | None, base: float, auto: bool = True) -> float:
+    """Bewegungsgeschwindigkeit in % (1 langsam ... 100 schnell) passend zum Tempo.
+
+    Ohne Automatik oder ohne Tempo gilt die Standard-Geschwindigkeit. Sonst wird um sie herum
+    glatt (Sinus-Übergang) zwischen BPM_SLOW (langsam) und BPM_FAST (schnell) abgebildet.
+    """
+    base = max(1.0, min(100.0, float(base)))
+    if not auto or not bpm:
+        return base
+    b = float(bpm)
+    t = (b - BPM_MID) / ((BPM_MID - BPM_SLOW) if b < BPM_MID else (BPM_FAST - BPM_MID))
+    t = math.sin(max(-1.0, min(1.0, t)) * math.pi / 2)
+    span = (100.0 - base) if t > 0 else (base - 1.0)
+    return max(1.0, min(100.0, base + t * span * MH_SPEED_REACH))
+
+
+def mh_speed_value(bpm: float | None, base: float, auto: bool = True) -> int:
+    """DMX-Wert für den Geschwindigkeitskanal (0 = schnell ... 225 = langsam, nie darüber)."""
+    pct = mh_speed_percent(bpm, base, auto)
+    return max(0, min(MH_SPEED_MAX, round((100.0 - pct) / 99.0 * MH_SPEED_MAX)))
+
+
 # ---------- Titel für die Tempo-Suche ----------
 
 _NOISE = re.compile(

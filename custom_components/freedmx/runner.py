@@ -120,5 +120,9 @@ class PatternRunner:
                 vals = self._device.get_channels(start, len(parse_layout(lamp["layout"])))
                 for channel, value in position_writes(lamp, percent_to_16bit(pan), percent_to_16bit(tilt)):
                     vals[channel - start] = value
+                sp = self.beat.mh_speed_for(lamp, self._hass.data.get("freedmx", {}).get("lights", {}).get(lamp["id"])) \
+                    if self.beat is not None else None
+                if sp is not None and sp[0] < len(vals):
+                    vals[sp[0]] = sp[1]  # Kopf-Tempo folgt dem Beat (Wert gleich -> nichts ändert sich)
                 self._device.set_channels(start, vals)
             await asyncio.sleep(STEP)
