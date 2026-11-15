@@ -58,6 +58,7 @@ DEFAULTS: dict[str, Any] = {
     "offset_ms": 0,
     "intensity": 70,
     "lamps": None,      # None = alle geeigneten Lampen
+    "players": None,    # None = alle Music-Assistant-Player; sonst nur diese als Taktgeber
     "manual_bpm": 120.0,
     "palette": "regenbogen",
     "colors": ["#ff0000", "#0050ff", "#00ff40"],   # eigene Farben
@@ -161,11 +162,19 @@ class BeatEngine:
             if e.domain == "media_player" and e.platform == "music_assistant" and not e.disabled_by
         )
 
+    def chosen_players(self) -> list[str]:
+        """Player, die als Taktgeber in Frage kommen (Auswahl in der Karte)."""
+        allp = self.ma_players()
+        sel = self.settings.get("players")
+        if not isinstance(sel, list):
+            return allp
+        return [p for p in sel if p in allp or self.hass.states.get(p)]
+
     def _resubscribe(self) -> None:
         if self._unsub_state:
             self._unsub_state()
             self._unsub_state = None
-        ids = self.ma_players()
+        ids = sorted(set(self.ma_players()) | set(self.chosen_players()))
         if self.settings["source"] not in (AUTO, MANUAL) and self.settings["source"] not in ids:
             ids.append(self.settings["source"])
         if ids:
@@ -188,7 +197,7 @@ class BeatEngine:
             return None
         if src != AUTO:
             return src
-        players = self.ma_players()
+        players = self.chosen_players()
         playing = [p for p in players if (st := self.hass.states.get(p)) and st.state == "playing"]
         # Multiroom: Mitglieder einer Gruppe spielen dasselbe wie der Gruppen-Chef -> nur den Chef nehmen
         members = set()
@@ -452,6 +461,11 @@ class BeatEngine:
                 v = round(clamp_bpm(float(v)), 2)
             if k == "lamps":
                 v = [x for x in v if any(l["id"] == x for l in self._lamps)] if isinstance(v, list) else None
+            if k == "players":
+                v = [str(x) for x in v if str(x).startswith("media_player.")] if isinstance(v, list) else None
+                if v is not None and not v:
+                    v = None
+                changed_source = changed_source or v != self.settings.get("players")
             if k == "palette" and v not in PALETTES and v != "eigene":
                 continue
             if k == "colors":
@@ -468,7 +482,7 @@ class BeatEngine:
                 v = min((0, 1, 2, 4), key=lambda r: abs(r - int(v)))
                 self._auto_slot = None
             if k == "source":
-                changed_source = v != self.settings["source"]
+                changed_source = changed_source or v != self.settings["source"]
             self.settings[k] = v
         if changed_source:
             self.clock = BeatClock()
@@ -612,6 +626,7 @@ class BeatEngine:
             **{k: self.settings[k] for k in ("enabled", "source", "effect", "bars", "offset_ms", "intensity", "manual_bpm")},
             "lampen": self.settings["lamps"],
             "lampen_wahl": self.lamp_choices(),
+            "player_wahl": self.settings.get("players"),
             "ma_player": [
                 {"entity_id": p, "name": (st.attributes.get("friendly_name") if (st := self.hass.states.get(p)) else p) or p}
                 for p in self.ma_players()

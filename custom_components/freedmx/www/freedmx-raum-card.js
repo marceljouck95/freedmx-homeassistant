@@ -965,6 +965,15 @@ class FreedmxBeatCard extends HTMLElement {
       cur = cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v];
       this._set({ lamps: cur.length === all.length ? "alle" : cur });
     } else if (a === "lamps-all") this._set({ lamps: "alle" });
+    else if (a === "player") {
+      const all = (at.ma_player || []).map((p) => p.entity_id);
+      let cur = Array.isArray(at.player_wahl) ? [...at.player_wahl] : [...all];
+      cur = cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v];
+      const upd = { players: !cur.length || cur.length === all.length ? "alle" : cur };
+      if (at.source !== "auto") upd.source = "auto";
+      this._set(upd);
+    } else if (a === "players-all") this._set({ players: "alle", source: "auto" });
+    else if (a === "src-manual") this._set({ source: "manuell" });
     else if (a === "pattern") { const e = at.entitaeten?.muster; if (e) this._hass.callService("select", "select_option", { entity_id: e, option: v }); }
   }
   _change(ev) {
@@ -986,7 +995,7 @@ class FreedmxBeatCard extends HTMLElement {
     this._anchor = { ms: a.anker_ms, beat: a.anker_beat, bpm: parseFloat(st.state), on: !!a.laeuft && !!a.enabled };
     // Regler und Farbwähler nicht neu zeichnen, solange sie bedient werden
     if (this.shadowRoot.activeElement && /INPUT|SELECT/.test(this.shadowRoot.activeElement.tagName)) return;
-    const keys = ["enabled", "source", "effect", "bars", "offset_ms", "intensity", "lampen", "lampen_wahl", "ma_player", "status", "bpm_quelle", "titel", "kuenstler", "manual_bpm", "laeuft", "palette", "farben", "rate", "auto_lights", "auto_pattern", "auto_every", "live_bpm", "live_status", "live_interval"];
+    const keys = ["enabled", "source", "effect", "bars", "offset_ms", "intensity", "lampen", "lampen_wahl", "ma_player", "player_wahl", "player", "status", "bpm_quelle", "titel", "kuenstler", "manual_bpm", "laeuft", "palette", "farben", "rate", "auto_lights", "auto_pattern", "auto_every", "live_bpm", "live_status", "live_interval"];
     const sig = JSON.stringify([st.state, keys.map((k) => a[k]), mu?.state, mu?.attributes?.options, c, this._err]);
     if (sig === this._sig) return;
     this._sig = sig;
@@ -1008,6 +1017,18 @@ class FreedmxBeatCard extends HTMLElement {
       </div>
       <div class="info">${track}<div>${frEsc(a.enabled ? a.status || "" : "Aus – einschalten, dann läuft alles automatisch mit der Musik")}</div></div>`;
     if (this._err) h += `<div class="err">${frEsc(this._err)}</div>`;
+    {
+      const pl = a.ma_player || [], auto = a.source === "auto";
+      const psel = Array.isArray(a.player_wahl) ? a.player_wahl : pl.map((p) => p.entity_id);
+      const fix = !auto && !manual ? a.source : null;
+      const now = a.player ? (pl.find((p) => p.entity_id === a.player)?.name || a.player) : "";
+      h += sec("players", "Abspielgeräte (Taktgeber)", `<div class="row">
+          <button class="b ${auto && !Array.isArray(a.player_wahl) ? "on" : ""}" data-a="players-all">Alle</button>
+          ${pl.map((p) => `<button class="b ${(auto && psel.includes(p.entity_id)) || fix === p.entity_id ? "on" : ""}" data-a="player" data-v="${frEsc(p.entity_id)}">${frEsc(p.name)}</button>`).join("")}
+          <button class="b ${manual ? "on" : ""}" data-a="src-manual">Manuell</button></div>
+        ${pl.length ? "" : `<div class="hint">Keine Music-Assistant-Player gefunden.</div>`}
+        <div class="hint">${manual ? "Fester Takt ohne Musik." : "Nur die gewählten Geräte steuern den Takt. Spielen mehrere, bleibt das zuerst gestartete." + (now ? " Gerade: " + frEsc(now) : "")}</div>`, true);
+    }
     h += sec("fx", "Effekt", `
       <div class="row">${chips(Object.entries(a.effekte || {}), "effect", a.effect)}</div>
       <div class="lbl">Stärke (wie weit zwischen den Schlägen abgedunkelt wird)</div>

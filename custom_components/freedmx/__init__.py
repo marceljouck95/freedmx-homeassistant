@@ -160,7 +160,7 @@ BEAT_BPM_SCHEMA = BEAT_BASE_SCHEMA.extend(
     }
 )
 BEAT_SETTING_KEYS = (
-    "enabled", "source", "effect", "bars", "offset_ms", "intensity", "lamps", "manual_bpm",
+    "enabled", "source", "effect", "bars", "offset_ms", "intensity", "lamps", "players", "manual_bpm",
     "palette", "colors", "rate", "auto_lights", "auto_pattern", "auto_every", "live_bpm", "live_interval",
 )
 BEAT_SETTINGS_SCHEMA = BEAT_BASE_SCHEMA.extend(
@@ -172,6 +172,7 @@ BEAT_SETTINGS_SCHEMA = BEAT_BASE_SCHEMA.extend(
         vol.Optional("offset_ms"): vol.All(vol.Coerce(int), vol.Range(min=-1000, max=1000)),
         vol.Optional("intensity"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
         vol.Optional("lamps"): vol.Any("alle", vol.All(cv.ensure_list, [cv.string])),
+        vol.Optional("players"): vol.Any("alle", vol.All(cv.ensure_list, [cv.entity_id])),
         vol.Optional("manual_bpm"): vol.All(vol.Coerce(float), vol.Range(min=20, max=480)),
         vol.Optional("palette"): cv.string,
         vol.Optional("colors"): vol.All(cv.ensure_list, [cv.string]),
